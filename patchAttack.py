@@ -21,15 +21,43 @@ from utils import *
 
 
 class AffineMaskSticker(nn.Module):
-	"""docstring for sticker"""
+	"""
+	Given a mask that can be a png image or an numpy array this creates a sticker. After creation
+	you must set the mini-batch size, before shipping it to the GPU.	
+
+
+	Args:
+        mask: either a numpy array or a the filename of a png image, of shape `(C,H_{mask},W_{mask})`
+		targetShape: the shape that this mask needs to fit into
+        maxRotation: The mask will be rotated within (-maxRotation,maxRotation) degrees
+        maxTranslation: The mask will be translated (-maxTranslation,maxTranslation) 
+        	within the [-1,1]x[-1,1] image space
+        maxScale: The mask will be scaled by (1-maxScale,1+maxScale) 
+
+    Shape:
+        - Input: `(N,C,H,W)`
+        - Output: `(N,C,H,W)`  (same shape as input)
+
+    Attributes:
+        sticker: the learnable weights of the sticker of shape
+            `(C,H_{mask},W_{mask})` (same as mask)
+        mask:   not-learnable mask of shape `(C,H_{mask},W_{mask})`
+        
+    Examples::
+
+        >>> m = nn.Linear(20, 30)
+        >>> input = torch.randn(128, 20)
+        >>> output = m(input)
+        >>> print(output.size())
+	"""
 	def __init__(self, 
 		mask,
-		mean,
-		std,
 		targetShape,
 		maxRotation,
 		maxTranslation,
-		maxScale):
+		maxScale,
+		mean= 0.5,
+		std = 0.05):
 		super(AffineMaskSticker, self).__init__()
 		# If we wanted a png based mask, we can pass a filename rather than a 
 		if isinstance(mask, basestring):
@@ -105,9 +133,6 @@ class AffineMaskSticker(nn.Module):
 
 		return stickered
 
-def makeSticker(shape,mean,std):
-	
-	return sticker
 
 if __name__ == "__main__":
 	model = torch.load("mnist.pickle")
@@ -131,16 +156,16 @@ if __name__ == "__main__":
 
 	print testTargetedAttack(model,mnist.testing(batch_size),masker,targetLabel.cpu())
 
-	for j in range(5):
+	for j in range(20):
 		for i, data in enumerate(trainloader, 0):
 			images, labels = data
 			images = images.cuda()
 
 			optimizer.zero_grad()
 			stickered = masker(images)
-			if (j == 0 or j == 9) and i == 0:
+			if (j == 0 or j == 19) and i == 0:
 				imshow(stickered.clone().detach())
-			output = model.forward(stickered)
+			output = model(stickered)
 
 			loss = criterion(output, targetLabel)
 			loss.backward()

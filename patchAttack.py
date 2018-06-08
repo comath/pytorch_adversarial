@@ -2,7 +2,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import math
-
+import time
+from tqdm import tqdm
 
 
 class AffineMaskSticker(nn.Module):
@@ -44,14 +45,17 @@ class AffineMaskSticker(nn.Module):
 		maxRotation,
 		maxTranslation,
 		scale,
-		mean= 0.5,
-		std = 0.05):
+		mean= 0.0,
+		std = 0.1):
 		super(AffineMaskSticker, self).__init__()
 		# If we wanted a png based mask, we can pass a filename rather than a 
 		if isinstance(mask, basestring):
 			from skimage import io, img_as_float
 
-			mask = img_as_float(io.imread(mask)).transpose(2,0,1)
+			mask = img_as_float(io.imread(mask))
+
+			mask = mask.transpose(2,0,1)
+
 
 		self.mask = torch.from_numpy(mask)
 		self.mask = self.mask.type(torch.FloatTensor)
@@ -62,10 +66,10 @@ class AffineMaskSticker(nn.Module):
 		self.sticker = nn.Parameter(torch.normal(mean,std))
 		
 		# Roughly in the middle
-		x = (targetShape[-2] - self.mask.size()[-2])/2
-		y = targetShape[-2] - (x + self.mask.size()[-2])
-		z = (targetShape[-1] - self.mask.size()[-1])/2
-		w = targetShape[-1] - (z + self.mask.size()[-1])
+		x = (targetShape[-1] - self.mask.size()[-1])/2
+		y = targetShape[-1] - (x + self.mask.size()[-1])
+		z = (targetShape[-2] - self.mask.size()[-2])/2
+		w = targetShape[-2] - (z + self.mask.size()[-2])
 		self.pad = nn.ConstantPad3d((x,y,z,w,0,0), 0)
 
 		# The boundaries of the rotation, translation and scaling
@@ -94,6 +98,15 @@ class AffineMaskSticker(nn.Module):
 		self.placedMask = nn.Parameter(self.placedMask,requires_grad=False)
 		self.aff = nn.Parameter(torch.zeros((self.batch_size,2,3)),requires_grad=False)
 
+	def __setAff__(self,S):
+		# Rotations
+		self.aff[:, 0, 0] = (1/S[:,1])*S[:,0].cos()
+		self.aff[:, 0, 1] = (1/S[:,1])*S[:,0].sin()
+		self.aff[:, 1, 0] = (1/S[:,1])*(-S[:,0]).sin()
+		self.aff[:, 1, 1] = (1/S[:,1])*S[:,0].cos()
+		self.aff[:, 0, 2] = S[:,2]
+		self.aff[:, 1, 2] = S[:,3]
+
 	def forward(self,images):
 		'''
 		Places the sticker on the image with a random translation
@@ -106,17 +119,10 @@ class AffineMaskSticker(nn.Module):
 
 		self.samples = self.samples.random_(0,1000)
 		S = F.linear(self.samples, self.boundaries,self.offsets)
+		self.__setAff__(S)
 
-		# Rotations
-		self.aff[:, 0, 0] = (1/S[:,1])*S[:,0].cos()
-		self.aff[:, 0, 1] = (1/S[:,1])*S[:,0].sin()
-		self.aff[:, 1, 0] = (1/S[:,1])*(-S[:,0]).sin()
-		self.aff[:, 1, 1] = (1/S[:,1])*S[:,0].cos()
-		self.aff[:, 0, 2] = S[:,2]
-		self.aff[:, 1, 2] = S[:,3]
 
 		affineGrid = F.affine_grid(self.aff,images.size())
-
 		placedMask = F.grid_sample(self.placedMask,affineGrid,padding_mode='border')
 		maskedSticker = F.grid_sample(maskedSticker,affineGrid)
 
@@ -125,6 +131,45 @@ class AffineMaskSticker(nn.Module):
 
 		return stickered
 
+def trainPatch(masker,model,loader,targetLabel,optimizer,criterion,epochs,batch_size,update_rate=20):
+	epoch_size = len(loader)
+	for epoch in range(epochs):
+		epoch_loss = torch.zeros((1,))
+		epoch_loss = epoch_loss.cuda()
+		update_loss = torch.zeros((1,))
+		update_loss = update_loss.cuda()
+
+		dataIterator = tqdm(enumerate(loader, 0),total = epoch_size)
+		dataIterator.set_description("update loss: %.3f, epoch loss: %.3f" % (0,0))
+		for i, data in dataIterator:
+			images, labels = data
+			images = images.cuda(async=True)
+
+			optimizer.zero_grad()
+			stickered = masker.forward(images)
+			output = model.forward(stickered)
+			loss = criterion(output, targetLabel)
+			loss.backward()
+			optimizer.step()
+			# print statistics
+			update_loss += loss
+			if i % update_rate == update_rate - 1:    # print every 500 mini-batches
+				epoch_loss += update_loss
+				epoch_loss, update_loss = epoch_loss.cpu(), update_loss.cpu()
+				dataIterator.set_description(
+					"update loss: %.3f, epoch loss: %.3f" % (
+						update_loss[0] / update_rate,
+						epoch_loss[0]/(i + 1),
+						))
+				update_loss.zero_()
+				epoch_loss, update_loss = epoch_loss.cuda(), update_loss.cuda()
+
+			
+		epoch_loss = epoch_loss.cpu()
+		print("Epoch %d/%d loss: %.4f" % (epoch+1,epoch_size,epoch_loss[0]/epoch_size))
+				
+		#if (epoch == 0 or epoch == 9):
+			#imshow(stickered.clone().detach())
 
 if __name__ == "__main__":
 	from cifar10 import CIFAR10ResNet,residual
@@ -137,8 +182,8 @@ if __name__ == "__main__":
 
 	model = torch.load("cifarnetbn.pickle")
 	mnist = CIFAR10()
-	batch_size = 200
-	trainloader = mnist.training(batch_size)
+	batch_size = 400
+	loader = mnist.training(batch_size)
 	model.cpu()
 
 	mask = np.ones((3,15,15),dtype=np.float32)
@@ -152,41 +197,21 @@ if __name__ == "__main__":
 	targetLabel = targetLabel.cuda()
 
 	criterion = nn.CrossEntropyLoss()
-	optimizer = optim.Adam([masker.sticker], lr=0.001)
+	optimizer = optim.Adam([masker.sticker], lr=0.001,weight_decay=0.00001)
 
-	print testTargetedAttack(model,mnist.testing(batch_size),masker,targetLabel.cpu())
+	untrainedError = testTargetedAttack(model,mnist.testing(batch_size),masker,targetLabel.cpu())
+	
+	trainPatch(masker,model,loader,targetLabel,optimizer,criterion,5,batch_size,50)
 
-	for epoch in range(30):
-		running_loss = 0.0
-		for i, data in enumerate(trainloader, 0):
-			images, labels = data
-			images = images.cuda()
+	trainedError = testTargetedAttack(model,mnist.testing(batch_size),masker,targetLabel.cpu())
+	print('Untrained error: %.5f, Trained error: %.5f'%(untrainedError,trainedError))
 
-			optimizer.zero_grad()
-			stickered = masker(images)
-
-			output = model(stickered)
-			loss = criterion(output, targetLabel)
-			loss.backward()
-			# print statistics
-			running_loss += loss.item()
-			if i % 200 == 199:    # print every 500 mini-batches
-				print('[%d, %5d] loss: %.3f' %
-				  (epoch + 1, batch_size*(i + 1), running_loss / 2000))
-				running_loss = 0.0
-			optimizer.step()
-			torch.clamp(masker.sticker,0.1,0.99)
-		if (epoch == 0 or epoch == 19) and i == 0:
-			imshow(stickered.clone().detach())
-
-	print testTargetedAttack(model,mnist.testing(batch_size),masker,targetLabel.cpu())
 
 	sticker = torch.mul(masker.sticker,masker.mask).permute(1,2,0).detach()
 	sticker = sticker.cpu().numpy()
-	sticker = np.clip(sticker,0,1)
+	sticker = np.clip(sticker,-1,1)
 	if sticker.shape[2] == 1:
 		sticker.shape = (15,15)
 		sticker = gray2rgb(sticker)
-	print(sticker.shape)
 
-	io.imsave("sticker.png",sticker)
+	io.imsave("sticker.png",(sticker+1)/2)

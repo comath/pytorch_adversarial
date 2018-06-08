@@ -12,19 +12,25 @@ import torchvision
 import torchvision.transforms as transforms
 from torchvision import transforms, utils, datasets
 
-from patchAttack import AffineMaskSticker
+from patchAttack import AffineMaskSticker, trainPatch
 
-batch_size = 20
+
+
+batch_size = 75
 
 transform = transforms.Compose(
-    [transforms.RandomAffine(36, translate=(0.1,0.1), scale=(0.9,1.1), shear=20),
+    [#transforms.RandomAffine(15, translate=(0.1,0.1), scale=(0.9,1.1)),
     transforms.Resize((224,224)),
     transforms.ToTensor()])
-trainset = datasets.ImageFolder("/home/sven/bulk/Data/ILSVRC/Data/DET/",transform=transform)
-loader = torch.utils.data.DataLoader(trainset, batch_size=batch_size, num_workers=10)
+trainset = datasets.ImageFolder("/home/sven/data/ILSVRC/Data/DET/train/ILSVRC2013_train/",transform=transform)
+testset = datasets.ImageFolder("/home/sven/data/ILSVRC/Data/DET/ver/",transform=transform)
+testloader = torch.utils.data.DataLoader(testset, batch_size=batch_size, num_workers=40, pin_memory=True, drop_last=True)
+
+
+loader = torch.utils.data.DataLoader(trainset, batch_size=batch_size, num_workers=40, shuffle=True, pin_memory=True, drop_last=True)
 dataiter = iter(loader)
 
-masker = AffineMaskSticker("ai_mask.png",(3,224,224),90,0.6,(0.2,1.5))
+masker = AffineMaskSticker("mask.png",(3,224,224),90,0.6,(0.3,2))
 masker.setBatchSize(batch_size)
 
 targetLabel = torch.full([batch_size],346,dtype=torch.long)
@@ -37,40 +43,21 @@ model.cuda()
 masker.cuda()
 
 criterion = nn.CrossEntropyLoss()
-optimizer = optim.Adam([masker.sticker], lr=0.001)
+optimizer = optim.Adam([masker.sticker], lr=0.0002,weight_decay=0.000002)
+
 #optimizer = optim.SGD([masker.sticker], lr=0.1, momentum=0.9)
 
+untrainedError = testTargetedAttack(model,testloader,masker,targetLabel.cpu())
+print('Untrained error: %.5f'%(untrainedError))
+trainPatch(masker,model,loader,targetLabel,optimizer,criterion,10,batch_size)
 
-print testTargetedAttack(model,loader,masker,targetLabel.cpu())
+trainedError = testTargetedAttack(model,testloader,masker,targetLabel.cpu())
+print('Untrained error: %.5f, Trained error: %.5f'%(untrainedError,trainedError))
 
-for epoch in range(100):
-	running_loss = 0.0
-	for i, data in enumerate(loader, 0):
-		images, labels = data
-		images = images.cuda()
-
-		optimizer.zero_grad()
-		stickered = masker(images)
-
-		output = model(stickered)
-		loss = criterion(output, targetLabel)
-		loss.backward()
-		# print statistics
-		running_loss += loss.item()
-		if i % 200 == 199:    # print every 500 mini-batches
-			print('[%d, %5d] loss: %.3f' %
-			  (epoch + 1, batch_size*(i + 1), running_loss / 2000))
-			running_loss = 0.0
-		optimizer.step()
-		torch.clamp(masker.sticker,0.1,0.99)
-	if (epoch == 0 or epoch == 9):
-		imshow(stickered.clone().detach())
-
-print testTargetedAttack(model,loader,masker,targetLabel.cpu())
-
+sticker = (masker.sticker + 1)/2
 sticker = torch.mul(masker.sticker,masker.mask).permute(1,2,0).detach()
 sticker = sticker.cpu().numpy()
-sticker = np.clip(sticker,0,1)
+sticker = np.clip(sticker,-1,1)
 if sticker.shape[2] == 1:
 	sticker.shape = (15,15)
 	sticker = gray2rgb(sticker)

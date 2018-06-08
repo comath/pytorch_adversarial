@@ -2,6 +2,8 @@ import matplotlib.pyplot as plt
 import torchvision
 import numpy as np
 import torch
+from tqdm import tqdm
+
 
 def imshow(imgs):
 	images = torchvision.utils.make_grid(imgs)
@@ -38,21 +40,34 @@ def testTargetedAttack(model,test_set,attack, target,device = None):
 	if device is None:
 		device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 	cpu = torch.device("cpu")
-	correct = 0.0
-	total = 0.0
+	correct = torch.zeros((1,))
+	total = torch.zeros((1,))
+	target = target.to(device)
+	correct = correct.to(device)
+	total = total.to(device)
+	dataIterator = tqdm(enumerate(test_set, 0),total = len(test_set))
+	dataIterator.set_description("targeted success rate: %.5f" % 0)
+	update_rate = 10
 	with torch.no_grad():
-		for data in test_set:
+		for i,data in dataIterator:
 			images, labels = data
 			images = images.to(device)
 			attackedImgs = attack(images)
 			outputs = model(attackedImgs)
 			_, predicted = torch.max(outputs.data, 1)
-			_, predicted = _.to(cpu), predicted.to(cpu)
 
 			total += target.size(0)
 			correct += (predicted == target).sum().item()
+
+			if i % update_rate == update_rate - 1:
+				total, correct = total.cpu(), correct.cpu()
+				dataIterator.set_description(
+					"targeted success rate: %.5f" % (correct[0]/total[0]))
+				total, correct = total.cuda(), correct.cuda()
+
 	        
-	return correct/total
+	correct, total = correct.to(cpu), total.to(cpu)
+	return correct[0]/total[0]
 
 def testNonTargetedAttack(model,test_set,attack, target,device = None):
 	if device is None:

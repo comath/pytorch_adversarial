@@ -21,12 +21,12 @@ class DATASET():
 
     def training(self,batch_size = 120, num_workers = 20):
         self.trainloader = torch.utils.data.DataLoader(self.trainset, batch_size=batch_size,
-                                      shuffle=True, num_workers=num_workers)
+                                      shuffle=True, pin_memory=True, num_workers=num_workers)
         return self.trainloader
 
     def testing(self,batch_size = 16, num_workers = 4):
         self.testloader = torch.utils.data.DataLoader(self.testset, batch_size=batch_size,
-                                     shuffle=False, num_workers=num_workers)
+                                     shuffle=False, pin_memory=True, num_workers=num_workers)
         return self.testloader
 
     def getNames(self, arr):

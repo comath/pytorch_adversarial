@@ -48,43 +48,67 @@ def testTargetedAttack(model,test_set,attack, target,device = None):
 	dataIterator = tqdm(enumerate(test_set, 0),total = len(test_set))
 	dataIterator.set_description("targeted success rate: %.5f" % 0)
 	update_rate = 10
-	with torch.no_grad():
-		for i,data in dataIterator:
-			images, labels = data
-			images = images.to(device)
+
+	for i,data in dataIterator:
+		images, labels = data
+		images = images.to(device)
+		if attack.usesLabels:
+			labels = labels.to(device)
+			attackedImgs = attack(images,labels)
+		else:
 			attackedImgs = attack(images)
-			outputs = model(attackedImgs)
-			_, predicted = torch.max(outputs.data, 1)
 
-			total += target.size(0)
-			correct += (predicted == target).sum().item()
+		
+		outputs = model(attackedImgs)
+		_, predicted = torch.max(outputs.data, 1)
 
-			if i % update_rate == update_rate - 1:
-				total, correct = total.cpu(), correct.cpu()
-				dataIterator.set_description(
-					"targeted success rate: %.5f" % (correct[0]/total[0]))
-				total, correct = total.cuda(), correct.cuda()
+		total += target.size(0)
+
+		correct += (predicted == target).sum().item()
+
+		if i % update_rate == update_rate - 1:
+			total, correct = total.cpu(), correct.cpu()
+			dataIterator.set_description(
+				"targeted success rate: %.5f" % (correct[0]/total[0]))
+			total, correct = total.cuda(), correct.cuda()
 
 	        
 	correct, total = correct.to(cpu), total.to(cpu)
 	return correct[0]/total[0]
 
-def testNonTargetedAttack(model,test_set,attack, target,device = None):
+def testNonTargetedAttack(model,test_set,attack,device = None):
 	if device is None:
 		device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 	cpu = torch.device("cpu")
-	correct = 0.0
-	total = 0.0
-	with torch.no_grad():
-		for data in test_set:
-			images, labels = data
-			images = images.to(device)
-			attackedImgs = attack(images)
-			outputs = model(attackedImgs)
-			_, predicted = torch.max(outputs.data, 1)
-			_, predicted = _.to(cpu), predicted.to(cpu)
+	correct = torch.zeros((1,))
+	total = torch.zeros((1,))
+	correct = correct.to(device)
+	total = total.to(device)
+	dataIterator = tqdm(enumerate(test_set, 0),total = len(test_set))
+	dataIterator.set_description("targeted success rate: %.5f" % 0)
+	update_rate = 10
 
-			total += labels.size(0)
-			correct += (predicted != labels).sum().item()
+	for i,data in dataIterator:
+		images, labels = data
+		images = images.to(device)
+		if attack.usesLabels:
+			labels = labels.to(device)
+			attackedImgs = attack(images,labels)
+		else:
+			attackedImgs = attack(images)
+
+		outputs = model(attackedImgs)
+		_, predicted = torch.max(outputs.data, 1)
+
+		total += images.size(0)
+		correct += (predicted != labels).sum().item()
+
+		if i % update_rate == update_rate - 1:
+			total, correct = total.cpu(), correct.cpu()
+			dataIterator.set_description(
+				"untargeted success rate: %.5f" % (correct[0]/total[0]))
+			total, correct = total.cuda(), correct.cuda()
+
 	        
-	return correct/total
+	correct, total = correct.to(cpu), total.to(cpu)
+	return correct[0]/total[0]

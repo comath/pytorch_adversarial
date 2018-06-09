@@ -6,6 +6,7 @@ import torch.nn.functional as F
 from datasets import MNIST
 from utils import *
 
+
 class MNISTNet(nn.Module):
     def __init__(self):
         super(MNISTNet, self).__init__()
@@ -34,7 +35,7 @@ class MNISTNet(nn.Module):
 if __name__ == "__main__":
     net = MNISTNet()
     mnist = MNIST()
-    batch_size = 120
+    batch_size = 400
     trainloader = mnist.training(batch_size)
 
     # Check for compatible GPU, then moves the model to it

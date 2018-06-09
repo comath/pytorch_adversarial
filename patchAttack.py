@@ -181,9 +181,9 @@ if __name__ == "__main__":
 
 
 	model = torch.load("cifarnetbn.pickle")
-	mnist = CIFAR10()
+	cifar = CIFAR10()
 	batch_size = 400
-	loader = mnist.training(batch_size)
+	loader = cifar.training(batch_size)
 	model.cpu()
 
 	mask = np.ones((3,15,15),dtype=np.float32)
@@ -199,11 +199,11 @@ if __name__ == "__main__":
 	criterion = nn.CrossEntropyLoss()
 	optimizer = optim.Adam([masker.sticker], lr=0.001,weight_decay=0.00001)
 
-	untrainedError = testTargetedAttack(model,mnist.testing(batch_size),masker,targetLabel.cpu())
+	untrainedError = testTargetedAttack(model,cifar.testing(batch_size),masker,targetLabel.cpu())
 	
 	trainPatch(masker,model,loader,targetLabel,optimizer,criterion,5,batch_size,50)
 
-	trainedError = testTargetedAttack(model,mnist.testing(batch_size),masker,targetLabel.cpu())
+	trainedError = testTargetedAttack(model,cifar.testing(batch_size),masker,targetLabel.cpu())
 	print('Untrained error: %.5f, Trained error: %.5f'%(untrainedError,trainedError))
 
 

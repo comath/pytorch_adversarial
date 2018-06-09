@@ -4,17 +4,27 @@ import numpy as np
 import torch
 from tqdm import tqdm
 
-
-def imshow(imgs):
+def numpyImages(imgs):
 	images = torchvision.utils.make_grid(imgs)
 	images = images / 2 + 0.5     # unnormalize
 	npimages = images.cpu().numpy()
 	images = np.transpose(npimages, (1, 2, 0))
-	images = np.clip(images,0,1)
+	return np.clip(images,0,1)
+
+def imshow(imgs):
+	images = numpyImages(imgs)
 	plt.figure()
 	# show images
 	plt.imshow(images)
 	plt.show()
+
+def visualizeAttack(images, attack, model = None):
+	images = numpyImages(images)
+	attackImages = numpyImages(attack(images))
+	fig, axs = plt.subplots(ncols=2, sharex=True, sharey=True)
+
+
+
 
 def testAccuracy(model,test_set,device = None):
 	if device is None:

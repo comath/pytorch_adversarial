@@ -131,6 +131,10 @@ class AffineMaskSticker(nn.Module):
 
 		return stickered
 
+	@property
+	def usesLabels(self):
+		return False
+
 def trainPatch(masker,model,loader,targetLabel,optimizer,criterion,epochs,batch_size,update_rate=20):
 	epoch_size = len(loader)
 	for epoch in range(epochs):

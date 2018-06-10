@@ -182,7 +182,7 @@ def trainPatch(masker,model,loader,optimizer,criterion,epochs,batch_size,update_
 
 			
 		epoch_loss = epoch_loss.cpu()
-		print("Epoch %d/%d loss: %.4f" % (epoch+1,epoch_size,epoch_loss[0]/epoch_size))
+		print("Epoch %d/%d loss: %.4f" % (epoch+1,epochs,epoch_loss[0]/epoch_size))
 				
 		#if (epoch == 0 or epoch == 9):
 			#imshow(stickered.clone().detach())
@@ -215,7 +215,8 @@ if __name__ == "__main__":
 	testset = cifar.testing(batch_size)
 	untrainedError = masker.test(model,testset)
 	
-	trainPatch(masker,model,loader,optimizer,criterion,2,batch_size)
+
+	trainPatch(masker,model,loader,optimizer,criterion,5,batch_size)
 
 	trainedError = masker.test(model,testset)
 	print('Untrained success rate: %.5f, Trained success rate: %.5f'%(untrainedError,trainedError))
@@ -225,11 +226,12 @@ if __name__ == "__main__":
 	images = images.cuda()
 	masker.visualize(images,model,filename="sticker_attack.png")
 
-	sticker = torch.mul(masker.sticker,masker.mask).permute(1,2,0).detach()
+	sticker = (masker.sticker + 1)/2
+	sticker = torch.mul(sticker,masker.mask).permute(1,2,0).detach()
 	sticker = sticker.cpu().numpy()
-	sticker = np.clip(sticker,-1,1)
+	sticker = np.clip(sticker,0,1)
 	if sticker.shape[2] == 1:
 		sticker.shape = (15,15)
 		sticker = gray2rgb(sticker)
 
-	io.imsave("sticker.png",(sticker+1)/2)
+	io.imsave("sticker.png",sticker)

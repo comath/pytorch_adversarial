@@ -9,15 +9,31 @@ import torch.nn.functional as F
 from utils import numpyImages, conditionalPad
 
 class BaseAttack(nn.Module):
+	# Override this if the attack does not use labels
 	@property
 	def usesLabels(self):
 		return True
-
+	# Override this if the attack is targeted
 	@property
 	def target(self):
 		return None
 
-	def visualize(self,images, model = None, num = 25, filename=None):
+	def forward(self):
+		raise NotImplementedError("Please implement attack!")
+
+	def visualize(self,images, model = None, num = 25, diff_multiply = 0, filename=None):
+		"""
+		Shows a grid of images before and after the attack. If you supply a diff_multiply it 
+		also shows the difference between the two images multiplied by what you provide
+
+		Args:
+			images: a set of images 
+	        model: If passed will highlight in green which images we successfully misclassified
+			num: the number of images to show, default 25
+	        diff_multiply: If passed and > 0 will multiply the difference between the normal and 
+	        	attacked images. Default 0
+	        filename: If passed will save to that file
+		"""
 		attackedImgs = self.forward(images)[:num]
 		imgs = images[:num]
 		images = numpyImages(imgs)
@@ -33,15 +49,17 @@ class BaseAttack(nn.Module):
 				success = (self.target[:num] == attackPredicted)
 			success = success.cpu()
 			
+			# Pad with green for a successful attack, red for unsuccessful
 			padded_attack = conditionalPad(success,attackedImgs)
 			attackedImages = numpyImages(padded_attack, padding=0)
 
 		else:
 			attackedImages = numpyImages(attackedImgs)
-			
+		if diff_multiply > 0:
+			fig, axs = plt.subplots(ncols=3)
+		else:
+			fig, axs = plt.subplots(ncols=2)
 
-
-		fig, axs = plt.subplots(ncols=2)
 		axs[0].imshow(images)
 		axs[0].xaxis.set_visible(False)
 		axs[0].yaxis.set_visible(False)
@@ -49,14 +67,31 @@ class BaseAttack(nn.Module):
 		axs[1].xaxis.set_visible(False)
 		axs[1].yaxis.set_visible(False)
 
+		if diff_multiply > 0:
+			difference = diff_multiply*(imgs - attackedImgs)
+			difference = numpyImages(difference)
+			axs[2].imshow(difference)
+			axs[2].xaxis.set_visible(False)
+			axs[2].yaxis.set_visible(False)
+
+
 		if filename is None:
 			plt.show()
 		else:
 			plt.savefig(filename,dpi=fig.dpi*4,bbox_inches='tight')
 
-	def test(self,model,test_set,device = None):
-		if device is None:
-			device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+	def test(self,model,test_set):
+		"""
+		Computes the success rate of the attack against the supplied model over the given test set.
+		Pass the same model as the attack was designed for for a whitebox, or a different model for
+		a black box. 
+
+		Args:
+			model: A model that can proccess the test set
+	        test_set: A torch.utils.data.DataLoader
+		"""
+
+		device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 		cpu = torch.device("cpu")
 		correct = torch.zeros((1,))
 		total = torch.zeros((1,))

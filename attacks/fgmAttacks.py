@@ -8,18 +8,22 @@ from tqdm import tqdm
 from attackTemplate import BaseAttack
 
 class GradientAttack(BaseAttack):
-	def __init__(self,model, loss, epsilon, n = 1, useLabels = False):
+	def __init__(self, model, loss, epsilon, n = 1, useLabels = False):
 		super(GradientAttack, self).__init__()
 		self.model = model
 		self.loss = loss
 		self.epsilon = epsilon
 		self.n = n
+		self.useLabels = useLabels
 
 	def sampleLabels(self,x):
 		outputs = self.model(x)
 		_, predicted = torch.max(outputs.data, 1)
 		return predicted
 
+	@property
+	def usesLabels(self):
+		return self.useLabels
 
 	def forward(self,x,y_true = None):
 		x_adv = x.requires_grad_()
@@ -78,25 +82,11 @@ class GradientSignAttack(GradientAttack):
 
 
 if __name__ == '__main__':
-	from utils import *
-	import torch.optim as optim
-	from skimage import io, transform, img_as_float
-	from skimage.color import gray2rgb
-
-	use_cifar = True
-
-	if use_cifar:
-		from cifar10 import CIFAR10ResNet,residual
-		from datasets import CIFAR10
-		model = torch.load("cifarnetbn.pickle")
-		dataset = CIFAR10()
-		batch_size = 400
-	else:
-		from mnist import MNISTNet, MNISTNetMLP
-		from datasets import MNIST
-		model = torch.load("mnist.pickle")
-		dataset = MNIST()
-		batch_size = 400
+	from cifar10 import CIFAR10ResNet,residual
+	from datasets import CIFAR10
+	model = torch.load("cifarnetbn.pickle")
+	dataset = CIFAR10()
+	batch_size = 400
 
 	loader = dataset.training(batch_size)
 	if torch.cuda.is_available():
@@ -114,8 +104,9 @@ if __name__ == '__main__':
 	dataiter = iter(dataset.testing(batch_size))
 	images, labels = dataiter.next()
 	images = images.cuda()
-	gs.visualize(images,model,filename="fgsm_0-07.png")
+	gs.visualize(images,model,filename="fgsm_0-07.png", diff_multiply = 1)
 
+	successRate = gs.test(model,dataset.testing(batch_size))
 
-	print gs.test(model,dataset.testing(batch_size))
+	print("The success rate on a ResNet CIFAR with FGSM eps 0.07 is " % (successRate,))
 

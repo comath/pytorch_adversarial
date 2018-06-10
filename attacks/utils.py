@@ -5,10 +5,12 @@ import numpy as np
 import torch
 from tqdm import tqdm
 import torch.nn.functional as F
+from math import sqrt
 
 
 def numpyImages(imgs,padding=2):
-	images = torchvision.utils.make_grid(imgs,padding=2)
+	numPerRow = int(sqrt(imgs.size()[0]))
+	images = torchvision.utils.make_grid(imgs,numPerRow,padding=2)
 	images = images / 2 + 0.5     # unnormalize
 	npimages = images.cpu().detach().numpy()
 	images = np.transpose(npimages, (1, 2, 0))
@@ -42,7 +44,6 @@ def conditionalPad(success,images,padding=2):
 	background = background.type_as(paddedImages)
 
 	return paddedImages + background
-
 
 def imshow(imgs, num = 25,filename=None):
 	images = numpyImages(imgs[:num,])

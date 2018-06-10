@@ -16,6 +16,7 @@ class AffineMaskSticker(BaseAttack):
 
 
 	Args:
+		target: We assume a 1-hot encoding with a target label, give the index of that label
         mask: either a numpy array or a the filename of a png image, of shape `(C,H_{mask},W_{mask})`
 		targetShape: the shape that this mask needs to fit into
         maxRotation: The mask will be rotated within (-maxRotation,maxRotation) degrees
@@ -34,11 +35,7 @@ class AffineMaskSticker(BaseAttack):
         mask:   not-learnable mask of shape `(C,H_{mask},W_{mask})`
         
     Examples::
-
-        >>> m = nn.Linear(20, 30)
-        >>> input = torch.randn(128, 20)
-        >>> output = m(input)
-        >>> print(output.size())
+		
 	"""
 	def __init__(self,
 		target,
@@ -206,14 +203,14 @@ if __name__ == "__main__":
 	model.cpu()
 
 	mask = np.ones((3,15,15),dtype=np.float32)
-	masker = AffineMaskSticker(9,mask,(3,32,32),90,0.6,(0.4,1.5))
+	masker = AffineMaskSticker(9,mask,(3,32,32),90,0.6,(0.2,1.2))
 	masker.setBatchSize(batch_size)
 
 	model.cuda()
 	masker.cuda()
 
 	criterion = nn.CrossEntropyLoss()
-	optimizer = optim.Adam([masker.sticker], lr=0.001,weight_decay=0.00001)
+	optimizer = optim.Adam([masker.sticker], lr=0.001)
 
 	testset = cifar.testing(batch_size)
 	untrainedError = masker.test(model,testset)

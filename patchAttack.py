@@ -4,9 +4,10 @@ import torch.nn.functional as F
 import math
 import time
 from tqdm import tqdm
+from attackTemplate import BaseAttack
 
 
-class AffineMaskSticker(nn.Module):
+class AffineMaskSticker(BaseAttack):
 	"""
 	Given a mask that can be a png image or an numpy array this creates a sticker. After creation
 	you must set the mini-batch size, before shipping it to the GPU.
@@ -39,7 +40,8 @@ class AffineMaskSticker(nn.Module):
         >>> output = m(input)
         >>> print(output.size())
 	"""
-	def __init__(self, 
+	def __init__(self,
+		target,
 		mask,
 		targetShape,
 		maxRotation,
@@ -48,7 +50,8 @@ class AffineMaskSticker(nn.Module):
 		mean= 0.0,
 		std = 0.1):
 		super(AffineMaskSticker, self).__init__()
-		# If we wanted a png based mask, we can pass a filename rather than a 
+		self.my_target = target
+		# If we wanted a png based mask, we can pass a filename rather than a numpy
 		if isinstance(mask, basestring):
 			from skimage import io, img_as_float
 
@@ -89,6 +92,9 @@ class AffineMaskSticker(nn.Module):
 		self.offsets[3] = -maxTranslation
 
 	def setBatchSize(self,batch_size):
+		'''
+		This preallocates the buffers for the random affine transformations
+		'''
 		self.batch_size = batch_size
 		self.samples = torch.Tensor(batch_size,4).type(torch.FloatTensor)
 		self.samples = nn.Parameter(self.samples,requires_grad=False)
@@ -98,8 +104,16 @@ class AffineMaskSticker(nn.Module):
 		self.placedMask = nn.Parameter(self.placedMask,requires_grad=False)
 		self.aff = nn.Parameter(torch.zeros((self.batch_size,2,3)),requires_grad=False)
 
+	@property
+	def target(self):
+		targetLabel = torch.full([batch_size],self.my_target,dtype=torch.long)
+		targetLabel = targetLabel.to(self.aff.device)
+		return targetLabel
+
 	def __setAff__(self,S):
-		# Rotations
+		'''
+		Takes the random samples, S and converts it into 2d affine transformations
+		'''
 		self.aff[:, 0, 0] = (1/S[:,1])*S[:,0].cos()
 		self.aff[:, 0, 1] = (1/S[:,1])*S[:,0].sin()
 		self.aff[:, 1, 0] = (1/S[:,1])*(-S[:,0]).sin()
@@ -131,8 +145,13 @@ class AffineMaskSticker(nn.Module):
 
 		return stickered
 
-def trainPatch(masker,model,loader,targetLabel,optimizer,criterion,epochs,batch_size,update_rate=20):
+	@property
+	def usesLabels(self):
+		return False
+
+def trainPatch(masker,model,loader,optimizer,criterion,epochs,batch_size,update_rate=20):
 	epoch_size = len(loader)
+	targetLabel = masker.target
 	for epoch in range(epochs):
 		epoch_loss = torch.zeros((1,))
 		epoch_loss = epoch_loss.cuda()
@@ -181,31 +200,34 @@ if __name__ == "__main__":
 
 
 	model = torch.load("cifarnetbn.pickle")
-	mnist = CIFAR10()
+	cifar = CIFAR10()
 	batch_size = 400
-	loader = mnist.training(batch_size)
+	loader = cifar.training(batch_size)
 	model.cpu()
 
 	mask = np.ones((3,15,15),dtype=np.float32)
-	masker = AffineMaskSticker(mask,(3,32,32),90,0.6,(0.4,1.5))
+	masker = AffineMaskSticker(9,mask,(3,32,32),90,0.6,(0.4,1.5))
 	masker.setBatchSize(batch_size)
 
 	model.cuda()
 	masker.cuda()
 
-	targetLabel = torch.full([batch_size],9,dtype=torch.long)
-	targetLabel = targetLabel.cuda()
-
 	criterion = nn.CrossEntropyLoss()
 	optimizer = optim.Adam([masker.sticker], lr=0.001,weight_decay=0.00001)
 
-	untrainedError = testTargetedAttack(model,mnist.testing(batch_size),masker,targetLabel.cpu())
+	testset = cifar.testing(batch_size)
+	untrainedError = masker.test(model,testset)
 	
-	trainPatch(masker,model,loader,targetLabel,optimizer,criterion,10,batch_size,50)
 
-	trainedError = testTargetedAttack(model,mnist.testing(batch_size),masker,targetLabel.cpu())
-	print('Untrained error: %.5f, Trained error: %.5f'%(untrainedError,trainedError))
+	trainPatch(masker,model,loader,optimizer,criterion,5,batch_size)
 
+	trainedError = masker.test(model,testset)
+	print('Untrained success rate: %.5f, Trained success rate: %.5f'%(untrainedError,trainedError))
+
+	dataiter = iter(testset)
+	images, labels = dataiter.next()
+	images = images.cuda()
+	masker.visualize(images,model,filename="sticker_attack.png")
 
 	sticker = (masker.sticker + 1)/2
 	sticker = torch.mul(sticker,masker.mask).permute(1,2,0).detach()

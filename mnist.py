@@ -6,6 +6,7 @@ import torch.nn.functional as F
 from datasets import MNIST
 from utils import *
 
+
 class MNISTNet(nn.Module):
     def __init__(self):
         super(MNISTNet, self).__init__()
@@ -25,16 +26,31 @@ class MNISTNet(nn.Module):
         x = F.relu(self.conv3(x))
         x = self.pool(x)
         x = x.view(-1, 8*12*12)
-        if self.training:
-            x = self.dropout(x)
+        x = self.dropout(x)
         x = self.fc1(x)
         x = self.fc2(x)
         return x
 
+class MNISTNetMLP(nn.Module):
+    def __init__(self):
+        super(MNISTNetMLP, self).__init__()
+        self.mlp = nn.Sequential(
+            nn.Linear(784, 300),
+            nn.ReLU(True),
+            nn.Linear(300, 150),
+            nn.ReLU(True),
+            nn.Linear(150, 10)
+        )
+
+    def forward(self, x):
+        x = x.view(-1, 28*28)
+
+        return self.mlp(x)
+
 if __name__ == "__main__":
-    net = MNISTNet()
+    net = MNISTNetMLP()
     mnist = MNIST()
-    batch_size = 120
+    batch_size = 400
     trainloader = mnist.training(batch_size)
 
     # Check for compatible GPU, then moves the model to it
@@ -80,6 +96,6 @@ if __name__ == "__main__":
     print('Accuracy of the network on the %d test images: %d %%' % (
         len(testloader),
         100 * accuracy))
-    print('Saving as: mnist.pickle')
+    print('Saving as: mnistMLP.pickle')
     net.cpu()
-    torch.save(net,"mnist.pickle")
+    torch.save(net,"mnistMLP.pickle")

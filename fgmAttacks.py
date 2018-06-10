@@ -8,15 +8,23 @@ from tqdm import tqdm
 from attackTemplate import BaseAttack
 
 class GradientAttack(BaseAttack):
-	def __init__(self,model, loss, epsilon, n = 1):
+	def __init__(self,model, loss, epsilon, n = 1, useLabels = False):
 		super(GradientAttack, self).__init__()
 		self.model = model
 		self.loss = loss
 		self.epsilon = epsilon
 		self.n = n
 
-	def forward(self,x,y_true):
+	def sampleLabels(self,x):
+		outputs = self.model(x)
+		_, predicted = torch.max(outputs.data, 1)
+		return predicted
+
+
+	def forward(self,x,y_true = None):
 		x_adv = x.requires_grad_()
+		if y_true is None:
+			y_true = self.sampleLabels(x)
 
 		for i in range(self.n):
 			y = self.model.forward(x_adv)
@@ -31,8 +39,10 @@ class GradientAttack(BaseAttack):
 		return x_adv
 
 class NormalizedGradientAttack(GradientAttack):
-	def forward(self,x,y_true):
+	def forward(self,x,y_true = None):
 		x_adv = x.requires_grad_()
+		if y_true is None:
+			y_true = self.sampleLabels(x)
 
 		for i in range(self.n):
 			y = self.model.forward(x_adv)
@@ -48,8 +58,10 @@ class NormalizedGradientAttack(GradientAttack):
 
 
 class GradientSignAttack(GradientAttack):
-	def forward(self,x,y_true):
+	def forward(self,x,y_true = None):
 		x_adv = x.requires_grad_()
+		if y_true is None:
+			y_true = self.sampleLabels(x)
 		
 		for i in range(self.n):
 			y = self.model.forward(x_adv)
@@ -64,23 +76,6 @@ class GradientSignAttack(GradientAttack):
 
 		return x_adv
 
-class ForeignGradientSignAttack(GradientAttack):
-	def forward(self,x,y_true):
-		x_adv = x.requires_grad_()
-
-		h_adv = self.model(x_adv)
-		cost = self.loss(h_adv, y_true)
-
-		self.model.zero_grad()
-		if x_adv.grad is not None:
-		    x_adv.grad.data.fill_(0)
-		cost.backward()
-
-		x_adv.grad.sign_()
-		x_adv = x_adv - self.epsilon*x_adv.grad
-		
-		x_adv = torch.clamp(x_adv, -1, 1)
-		return x_adv
 
 if __name__ == '__main__':
 	from utils import *
@@ -88,7 +83,7 @@ if __name__ == '__main__':
 	from skimage import io, transform, img_as_float
 	from skimage.color import gray2rgb
 
-	use_cifar = False
+	use_cifar = True
 
 	if use_cifar:
 		from cifar10 import CIFAR10ResNet,residual
@@ -97,7 +92,7 @@ if __name__ == '__main__':
 		dataset = CIFAR10()
 		batch_size = 400
 	else:
-		from mnist import MNISTNet
+		from mnist import MNISTNet, MNISTNetMLP
 		from datasets import MNIST
 		model = torch.load("mnist.pickle")
 		dataset = MNIST()
@@ -114,9 +109,13 @@ if __name__ == '__main__':
 	criterion = nn.CrossEntropyLoss()
 	model.to(device)
 
-	gs = GradientSignAttack(model,criterion,0.1)
-	fgs = ForeignGradientSignAttack(model,criterion,0.1)
+	gs = GradientSignAttack(model,criterion,0.07)
+
+	dataiter = iter(dataset.testing(batch_size))
+	images, labels = dataiter.next()
+	images = images.cuda()
+	gs.visualize(images,model,filename="fgsm_0-07.png")
 
 
-	print testNonTargetedAttack(model,dataset.testing(batch_size),gs)
-	print testNonTargetedAttack(model,dataset.testing(batch_size),fgs)
+	print gs.test(model,dataset.testing(batch_size))
+

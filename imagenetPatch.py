@@ -25,8 +25,6 @@ transform = transforms.Compose(
 trainset = datasets.ImageFolder("/home/sven/data/ILSVRC/Data/DET/train/ILSVRC2013_train/",transform=transform)
 testset = datasets.ImageFolder("/home/sven/data/ILSVRC/Data/DET/ver/",transform=transform)
 testloader = torch.utils.data.DataLoader(testset, batch_size=batch_size, num_workers=40, pin_memory=True, drop_last=True)
-
-
 loader = torch.utils.data.DataLoader(trainset, batch_size=batch_size, num_workers=40, shuffle=True, pin_memory=True, drop_last=True)
 dataiter = iter(loader)
 
@@ -43,24 +41,23 @@ model.cuda()
 masker.cuda()
 
 criterion = nn.CrossEntropyLoss()
-optimizer = optim.Adam([masker.sticker], lr=0.0002,weight_decay=0.000002)
+optimizer = optim.Adam([masker.sticker], lr=0.0006)
 
 #optimizer = optim.SGD([masker.sticker], lr=0.1, momentum=0.9)
 
-untrainedError = testTargetedAttack(model,testloader,masker,targetLabel.cpu())
-print('Untrained error: %.5f'%(untrainedError))
+#untrainedError = testTargetedAttack(model,testloader,masker,targetLabel.cpu())
+#print('Untrained error: %.5f'%(untrainedError))
 trainPatch(masker,model,loader,targetLabel,optimizer,criterion,10,batch_size)
 
-trainedError = testTargetedAttack(model,testloader,masker,targetLabel.cpu())
-print('Untrained error: %.5f, Trained error: %.5f'%(untrainedError,trainedError))
+#trainedError = testTargetedAttack(model,testloader,masker,targetLabel.cpu())
+#print('Untrained error: %.5f, Trained error: %.5f'%(untrainedError,trainedError))
 
 sticker = (masker.sticker + 1)/2
-sticker = torch.mul(masker.sticker,masker.mask).permute(1,2,0).detach()
+sticker = torch.mul(sticker,masker.mask).permute(1,2,0).detach()
 sticker = sticker.cpu().numpy()
-sticker = np.clip(sticker,-1,1)
+sticker = np.clip(sticker,0,1)
 if sticker.shape[2] == 1:
 	sticker.shape = (15,15)
 	sticker = gray2rgb(sticker)
-print(sticker.shape)
 
 io.imsave("ai_sticker.png",sticker)

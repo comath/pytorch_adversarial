@@ -166,7 +166,7 @@ def trainPatch(masker,model,loader,targetLabel,optimizer,criterion,epochs,batch_
 
 			
 		epoch_loss = epoch_loss.cpu()
-		print("Epoch %d/%d loss: %.4f" % (epoch+1,epoch_size,epoch_loss[0]/epoch_size))
+		print("Epoch %d/%d loss: %.4f" % (epoch+1,epochs,epoch_loss[0]/epoch_size))
 				
 		#if (epoch == 0 or epoch == 9):
 			#imshow(stickered.clone().detach())
@@ -201,17 +201,18 @@ if __name__ == "__main__":
 
 	untrainedError = testTargetedAttack(model,mnist.testing(batch_size),masker,targetLabel.cpu())
 	
-	trainPatch(masker,model,loader,targetLabel,optimizer,criterion,5,batch_size,50)
+	trainPatch(masker,model,loader,targetLabel,optimizer,criterion,10,batch_size,50)
 
 	trainedError = testTargetedAttack(model,mnist.testing(batch_size),masker,targetLabel.cpu())
 	print('Untrained error: %.5f, Trained error: %.5f'%(untrainedError,trainedError))
 
 
-	sticker = torch.mul(masker.sticker,masker.mask).permute(1,2,0).detach()
+	sticker = (masker.sticker + 1)/2
+	sticker = torch.mul(sticker,masker.mask).permute(1,2,0).detach()
 	sticker = sticker.cpu().numpy()
-	sticker = np.clip(sticker,-1,1)
+	sticker = np.clip(sticker,0,1)
 	if sticker.shape[2] == 1:
 		sticker.shape = (15,15)
 		sticker = gray2rgb(sticker)
 
-	io.imsave("sticker.png",(sticker+1)/2)
+	io.imsave("sticker.png",sticker)

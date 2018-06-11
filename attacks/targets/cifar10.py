@@ -135,9 +135,15 @@ if __name__ == "__main__":
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(net.parameters(), lr=0.002)
 
-    for epoch in range(100):  # loop over the dataset multiple times
-        running_loss = 0.0
-        for i, data in enumerate(trainloader, 0):
+    for epoch in range(500):  # loop over the dataset multiple times
+        epoch_loss = torch.zeros((1,))
+        epoch_loss = epoch_loss.cuda()
+        update_loss = torch.zeros((1,))
+        update_loss = update_loss.cuda()
+
+        dataIterator = tqdm(enumerate(loader, 0),total = epoch_size)
+        dataIterator.set_description("update loss: %.3f, epoch loss: %.3f" % (0,0))
+        for i, data in dataIterator:
             # get the inputs
             inputs, labels = data
             inputs, labels = inputs.to(device), labels.to(device)
@@ -152,11 +158,21 @@ if __name__ == "__main__":
             optimizer.step()
 
             # print statistics
-            running_loss += loss.item()
-            if i % 200 == 199:    # print every 500 mini-batches
-                print('[%d, %5d] loss: %.3f' %
-                      (epoch + 1, batch_size*(i + 1), running_loss / 2000))
-                running_loss = 0.0
+            update_loss += loss
+            if i % update_rate == update_rate - 1:    # print every 500 mini-batches
+                epoch_loss += update_loss
+                epoch_loss, update_loss = epoch_loss.cpu(), update_loss.cpu()
+                dataIterator.set_description(
+                    "update loss: %.3f, epoch loss: %.3f" % (
+                        update_loss[0] / update_rate,
+                        epoch_loss[0]/(i + 1),
+                        ))
+                update_loss.zero_()
+                epoch_loss, update_loss = epoch_loss.cuda(), update_loss.cuda()
+
+        epoch_loss = epoch_loss.cpu()
+        print("Epoch %d/%d loss: %.4f" % (epoch+1,epochs,epoch_loss[0]/epoch_size))
+
     net.eval()
     print('Finished Training, getting accuracy')
     testloader = cifar.testing()

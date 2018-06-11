@@ -37,7 +37,7 @@ class GradientAttack(BaseAttack):
 		if x_adv.grad is not None:
 			x_adv.grad.data.fill_(0)
 
-		x_grad = torch.autograd.grad(J, x_adv, allow_unused=True)[0]
+		x_grad = torch.autograd.grad(J, x_adv)[0]
 		x_adv = x_adv + self.epsilon*x_grad
 		x_adv = torch.clamp(x_adv, self.pixel_range[0], self.pixel_range[1])
 
@@ -84,7 +84,7 @@ class GradientSignAttack(GradientAttack):
 		x_grad = torch.autograd.grad(J, x_adv)[0]
 		x_adv = x + self.epsilon*x_grad.sign_()
 		x_adv = torch.clamp(x_adv, self.pixel_range[0], self.pixel_range[1])
-		
+
 		return x_adv
 
 

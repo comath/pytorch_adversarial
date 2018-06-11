@@ -9,6 +9,14 @@ import torch.nn.functional as F
 from utils import numpyImages, conditionalPad
 
 class BaseAttack(nn.Module):
+	'''
+	Base attack class to be extended. This holds a visualize and test method. 
+
+	Extend this and at least implement forward. You can also implement
+	'''
+
+	def forward(self):
+		raise NotImplementedError("Please implement attack!")
 	# Override this if the attack does not use labels
 	@property
 	def usesLabels(self):
@@ -18,8 +26,6 @@ class BaseAttack(nn.Module):
 	def target(self):
 		return None
 
-	def forward(self):
-		raise NotImplementedError("Please implement attack!")
 
 	def visualize(self,images, model = None, num = 25, diff_multiply = 0, filename=None):
 		"""

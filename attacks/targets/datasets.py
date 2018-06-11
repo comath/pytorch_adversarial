@@ -34,20 +34,20 @@ class DATASET():
 
 class MNIST(DATASET):
     def __init__(self):
-        self.trainset = torchvision.datasets.MNIST(root='../data', train=True,
+        self.trainset = torchvision.datasets.MNIST(root='data', train=True,
                                     download=True, transform=__transform_training__())
 
-        self.testset = torchvision.datasets.MNIST(root='../data', train=False,
+        self.testset = torchvision.datasets.MNIST(root='data', train=False,
                                    download=True, transform=__transform_testing__())
 
         self.classes = [str(i) for i in range(10)]
 
 class CIFAR10(DATASET):
     def __init__(self):
-        self.trainset = torchvision.datasets.CIFAR10(root='../data', train=True,
+        self.trainset = torchvision.datasets.CIFAR10(root='data', train=True,
                                     download=True, transform=__transform_training__())
 
-        self.testset = torchvision.datasets.CIFAR10(root='../data', train=False,
+        self.testset = torchvision.datasets.CIFAR10(root='data', train=False,
                                    download=True, transform=__transform_testing__())
 
         self.classes = ('plane', 'car', 'bird', 'cat',

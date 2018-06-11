@@ -1,4 +1,4 @@
-from utils import *
+from attacks.utils import *
 import torch.optim as optim
 
 from skimage import io, transform, img_as_float
@@ -12,11 +12,11 @@ import torchvision
 import torchvision.transforms as transforms
 from torchvision import transforms, utils, datasets
 
-from patchAttack import AffineMaskSticker, trainPatch
+from attacks.patchAttack import AffineMaskSticker, trainPatch
 
 
 
-batch_size = 75
+batch_size = 150
 
 transform = transforms.Compose(
     [#transforms.RandomAffine(15, translate=(0.1,0.1), scale=(0.9,1.1)),
@@ -27,37 +27,33 @@ testset = datasets.ImageFolder("/home/sven/data/ILSVRC/Data/DET/ver/",transform=
 testloader = torch.utils.data.DataLoader(testset, batch_size=batch_size, num_workers=40, pin_memory=True, drop_last=True)
 loader = torch.utils.data.DataLoader(trainset, batch_size=batch_size, num_workers=40, shuffle=True, pin_memory=True, drop_last=True)
 dataiter = iter(loader)
+imgs, labels = dataiter.next()
 
-masker = AffineMaskSticker("mask.png",(3,224,224),90,0.6,(0.3,2))
+masker = AffineMaskSticker(346,"mask.png",(3,224,224),90,0.6,(0.3,1.2),mean= 0.5)
 masker.setBatchSize(batch_size)
 
-targetLabel = torch.full([batch_size],346,dtype=torch.long)
-shortTargetLabel = torch.full([1],346,dtype=torch.long)
-targetLabel = targetLabel.cuda()
-
-model = torchvision.models.resnet50(pretrained=True)
+model = torchvision.models.resnet18(pretrained=True)
 
 model.cuda()
 masker.cuda()
 
 criterion = nn.CrossEntropyLoss()
-optimizer = optim.Adam([masker.sticker], lr=0.0006)
-
+optimizer = optim.Adam([masker.sticker], lr= 1, weight_decay=0.001)
+scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.1)
 #optimizer = optim.SGD([masker.sticker], lr=0.1, momentum=0.9)
 
 #untrainedError = testTargetedAttack(model,testloader,masker,targetLabel.cpu())
 #print('Untrained error: %.5f'%(untrainedError))
-trainPatch(masker,model,loader,targetLabel,optimizer,criterion,10,batch_size)
+trainPatch(masker,model,loader,optimizer,criterion,1,batch_size)
 
 #trainedError = testTargetedAttack(model,testloader,masker,targetLabel.cpu())
 #print('Untrained error: %.5f, Trained error: %.5f'%(untrainedError,trainedError))
 
-sticker = (masker.sticker + 1)/2
-sticker = torch.mul(sticker,masker.mask).permute(1,2,0).detach()
+sticker = torch.mul(masker.sticker,masker.mask).permute(1,2,0).detach()
 sticker = sticker.cpu().numpy()
 sticker = np.clip(sticker,0,1)
 if sticker.shape[2] == 1:
 	sticker.shape = (15,15)
 	sticker = gray2rgb(sticker)
 
-io.imsave("ai_sticker.png",sticker)
+io.imsave("ai_sticker_vgg19.png",sticker)

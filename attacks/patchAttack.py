@@ -61,7 +61,9 @@ class AffineMaskSticker(BaseAttack):
 		self.mask = self.mask.type(torch.FloatTensor)
 		self.mask = nn.Parameter(self.mask,requires_grad = False)
 
-		mean = mean*torch.ones(self.mask.size())
+		# We want the gradient to be applied as if it were centered ao the mean, but for regularization to recenter it. So we let the thing be at 0
+		self.mean = mean
+		zero_mean = torch.zeros(self.mask.size())
 		std = std*torch.ones(self.mask.size())
 		self.sticker = nn.Parameter(torch.normal(mean,std))
 		
@@ -103,7 +105,7 @@ class AffineMaskSticker(BaseAttack):
 
 	@property
 	def target(self):
-		targetLabel = torch.full([batch_size],self.my_target,dtype=torch.long)
+		targetLabel = torch.full([self.batch_size],self.my_target,dtype=torch.long)
 		targetLabel = targetLabel.to(self.aff.device)
 		return targetLabel
 
@@ -123,6 +125,7 @@ class AffineMaskSticker(BaseAttack):
 		Places the sticker on the image with a random translation
 		With a batch it applies the same translation.
 		'''
+		maskedSticker = self.mean + self.sticker 						# place it in the middle of the pixel space
 		maskedSticker = torch.mul(self.sticker,self.mask)
 		maskedSticker = self.pad(maskedSticker)
 		maskedSticker = maskedSticker.unsqueeze_(0)

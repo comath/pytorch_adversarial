@@ -12,14 +12,14 @@ import torchvision
 import torchvision.transforms as transforms
 from torchvision import transforms, utils, datasets
 
-from patchAttack import AffineMaskSticker, trainPatch
+from attacks.patchAttack import AffineMaskSticker, trainPatch
 
 
 
 batch_size = 75
 
 transform = transforms.Compose(
-    [#transforms.RandomAffine(15, translate=(0.1,0.1), scale=(0.9,1.1)),
+    [transforms.RandomAffine(15, translate=(0.1,0.1), scale=(0.9,1.1)),
     transforms.Resize((224,224)),
     transforms.ToTensor()])
 trainset = datasets.ImageFolder("/home/sven/data/ILSVRC/Data/DET/train/ILSVRC2013_train/",transform=transform)

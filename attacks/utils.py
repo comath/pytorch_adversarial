@@ -56,43 +56,43 @@ def imshow(imgs, num = 25,filename=None):
 		plt.savefig(filename,dpi=fig.dpi*4,bbox_inches='tight')
 
 def trainModel(model,loader,optimizer,criterion,epochs,update_rate=20):
-    epoch_size = len(trainloader)
-    for epoch in range(epochs):  # loop over the dataset multiple times
-        epoch_loss = torch.zeros((1,))
-        epoch_loss = epoch_loss.cuda()
-        update_loss = torch.zeros((1,))
-        update_loss = update_loss.cuda()
-        dataIterator = tqdm(enumerate(trainloader, 0),total = epoch_size)
-        dataIterator.set_description("update loss: %.3f, epoch loss: %.3f" % (0,0))
-        for i, data in dataIterator:
-            # get the inputs
-            inputs, labels = data
-            inputs, labels = inputs.to(device), labels.to(device)
+	epoch_size = len(trainloader)
+	for epoch in range(epochs):  # loop over the dataset multiple times
+		epoch_loss = torch.zeros((1,))
+		epoch_loss = epoch_loss.cuda()
+		update_loss = torch.zeros((1,))
+		update_loss = update_loss.cuda()
+		dataIterator = tqdm(enumerate(trainloader, 0),total = epoch_size)
+		dataIterator.set_description("update loss: %.3f, epoch loss: %.3f" % (0,0))
+		for i, data in dataIterator:
+			# get the inputs
+			inputs, labels = data
+			inputs, labels = inputs.to(device), labels.to(device)
 
-            # zero the parameter gradients
-            optimizer.zero_grad()
+			# zero the parameter gradients
+			optimizer.zero_grad()
 
-            # forward + backward + optimize
-            outputs = net(inputs)
-            loss = criterion(outputs, labels)
-            loss.backward()
-            optimizer.step()
+			# forward + backward + optimize
+			outputs = net(inputs)
+			loss = criterion(outputs, labels)
+			loss.backward()
+			optimizer.step()
 
-            # print statistics
-            update_loss += loss
-            if i % update_rate == update_rate - 1:    # print every 500 mini-batches
-                epoch_loss += update_loss
-                epoch_loss, update_loss = epoch_loss.cpu(), update_loss.cpu()
-                dataIterator.set_description(
-                    "update loss: %.3f, epoch loss: %.3f" % (
-                        update_loss[0] / update_rate,
-                        epoch_loss[0]/(i + 1),
-                        ))
-                update_loss.zero_()
-                epoch_loss, update_loss = epoch_loss.cuda(), update_loss.cuda()
+			# print statistics
+			update_loss += loss
+			if i % update_rate == update_rate - 1:    # print every 500 mini-batches
+				epoch_loss += update_loss
+				epoch_loss, update_loss = epoch_loss.cpu(), update_loss.cpu()
+				dataIterator.set_description(
+					"update loss: %.3f, epoch loss: %.3f" % (
+					update_loss[0] / update_rate,
+					epoch_loss[0]/(i + 1),
+					))
+				update_loss.zero_()
+				epoch_loss, update_loss = epoch_loss.cuda(), update_loss.cuda()
 
-        epoch_loss = epoch_loss.cpu()
-        print("Epoch %d/%d loss: %.4f" % (epoch+1,epochs,epoch_loss[0]/epoch_size))
+		epoch_loss = epoch_loss.cpu()
+		print("Epoch %d/%d loss: %.4f" % (epoch+1,epochs,epoch_loss[0]/epoch_size))
 
 def testAccuracy(model,test_set,device = None):
 	if device is None:

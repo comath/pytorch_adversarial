@@ -149,7 +149,7 @@ class AffineMaskSticker(BaseAttack):
 	def usesLabels(self):
 		return False
 
-def trainPatch(masker,model,loader,optimizer,criterion,epochs,batch_size,update_rate=20):
+def trainPatch(masker,model,loader,optimizer,criterion,epochs,update_rate=20):
 	epoch_size = len(loader)
 	targetLabel = masker.target
 	for epoch in range(epochs):

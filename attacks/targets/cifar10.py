@@ -1,12 +1,11 @@
 import torch.nn as nn
 import torch.nn.functional as F
-
+from tqdm import tqdm
 import torch
 import torchvision
 import torchvision.transforms as transforms
 
 from datasets import CIFAR10
-from utils import *
 
 class residual(nn.Module):
     def __init__(self,nxn,connections,padding):
@@ -118,9 +117,9 @@ class CIFAR10VGG(nn.Module):
 
 if __name__ == "__main__":
     import torch.optim as optim
-    net = CIFAR10ResNet(3)
+    net = CIFAR10ResNet(6)
     cifar = CIFAR10()
-    batch_size = 120
+    batch_size = 250
     trainloader = cifar.training(batch_size)
     if torch.cuda.is_available():
         print("Using GPU 0")
@@ -134,14 +133,17 @@ if __name__ == "__main__":
 
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(net.parameters(), lr=0.002)
+    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=100, gamma=0.5)
 
-    for epoch in range(500):  # loop over the dataset multiple times
+    update_rate = 20
+    epoch_size = len(trainloader)
+    epochs = 600
+    for epoch in range(epochs):  # loop over the dataset multiple times
         epoch_loss = torch.zeros((1,))
         epoch_loss = epoch_loss.cuda()
         update_loss = torch.zeros((1,))
         update_loss = update_loss.cuda()
-
-        dataIterator = tqdm(enumerate(loader, 0),total = epoch_size)
+        dataIterator = tqdm(enumerate(trainloader, 0),total = epoch_size)
         dataIterator.set_description("update loss: %.3f, epoch loss: %.3f" % (0,0))
         for i, data in dataIterator:
             # get the inputs
@@ -191,5 +193,5 @@ if __name__ == "__main__":
 
     print('Accuracy of the network on the 10000 test images: %d %%' % (
         100 * correct / total))
-    print('Saving as: cifarResNet.pickle')
-    torch.save(net,"cifarResNet.pickle")
+    print('Saving as: cifarDeepResNet.pickle')
+    torch.save(net,"cifarDeepResNet.pickle")

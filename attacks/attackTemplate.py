@@ -81,8 +81,8 @@ class BaseAttack(nn.Module):
 			axs[2].yaxis.set_visible(False)
 
 
-		if filename is None:
-			plt.show()
+		if filenwame is None:
+				plt.show()
 		else:
 			plt.savefig(filename,dpi=fig.dpi*4,bbox_inches='tight')
 

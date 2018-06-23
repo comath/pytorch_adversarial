@@ -3,6 +3,7 @@ import torch.nn.functional as F
 from tqdm import tqdm
 import torch
 import torchvision
+import torch.optim as optim
 import torchvision.transforms as transforms
 
 from datasets import CIFAR10
@@ -69,25 +70,26 @@ class CIFAR10ResNet(nn.Module):
         x = self.fc1(x)
         return x
 
-if __name__ == "__main__":
-    import torch.optim as optim
+def trainCIFAR10ResNet(device=None):
+    if device is None:
+        device = getDevice()
+        
     net = CIFAR10ResNet(3)
     cifar = CIFAR10()
     batch_size = 250
     trainloader = cifar.training(batch_size)
     
-    net.cuda()
 
-    print('Training Model')
+    print('Training CIFAR10 ResNet Model')
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(net.parameters(), lr=0.002)
     scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=100, gamma=0.2)
-    trainModel(net,trainloader,optimizer,criterion,400)
+    trainModel(device,net,trainloader,optimizer,criterion,400)
     
     net.eval()
     print('Finished Training, getting accuracy')
     testloader = cifar.testing()
     accuracy = testAccuracy(net,testloader)
     
-    print('Saving as: cifarResNet.pickle')
-    torch.save(net,"cifarResNet.pickle")
+    print('Saving as: cifar10ResNet.pkl')
+    torch.save(net,"cifar10ResNet.pkl")

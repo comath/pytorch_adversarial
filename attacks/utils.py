@@ -7,6 +7,13 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 from math import sqrt
 
+def getDevice():
+	if torch.cuda.is_available():
+		print("Using GPU 0")
+		device = torch.device("cuda:0")
+	else:
+		print("No GPU, using CPU")
+		device = torch.device("cpu")
 
 def numpyImages(imgs,padding=2):
 	numPerRow = int(sqrt(imgs.size()[0]))
@@ -55,15 +62,20 @@ def imshow(imgs, num = 25,filename=None):
 	else:
 		plt.savefig(filename,dpi=fig.dpi*4,bbox_inches='tight')
 
-def trainModel(model,loader,optimizer,criterion,epochs,update_rate=20):
-	epoch_size = len(trainloader)
+def trainModel(model,loader,optimizer,criterion,epochs,device=None,update_rate=20):
+	if device is None:
+		device = getDevice()
+	model.to(device)
+	epoch_size = len(loader)
 	for epoch in range(epochs):  # loop over the dataset multiple times
+		# For tracking the loss and making the progress bar
 		epoch_loss = torch.zeros((1,))
-		epoch_loss = epoch_loss.cuda()
+		epoch_loss = epoch_loss.to(device)
 		update_loss = torch.zeros((1,))
-		update_loss = update_loss.cuda()
-		dataIterator = tqdm(enumerate(trainloader, 0),total = epoch_size)
+		update_loss = update_loss.to(device)
+		dataIterator = tqdm(enumerate(loader, 0),total = epoch_size)
 		dataIterator.set_description("update loss: %.3f, epoch loss: %.3f" % (0,0))
+
 		for i, data in dataIterator:
 			# get the inputs
 			inputs, labels = data
@@ -73,12 +85,12 @@ def trainModel(model,loader,optimizer,criterion,epochs,update_rate=20):
 			optimizer.zero_grad()
 
 			# forward + backward + optimize
-			outputs = net(inputs)
+			outputs = model(inputs)
 			loss = criterion(outputs, labels)
 			loss.backward()
 			optimizer.step()
 
-			# print statistics
+			# Update progress bar
 			update_loss += loss
 			if i % update_rate == update_rate - 1:    # print every 500 mini-batches
 				epoch_loss += update_loss
@@ -89,10 +101,11 @@ def trainModel(model,loader,optimizer,criterion,epochs,update_rate=20):
 					epoch_loss[0]/(i + 1),
 					))
 				update_loss.zero_()
-				epoch_loss, update_loss = epoch_loss.cuda(), update_loss.cuda()
+				epoch_loss, update_loss = epoch_loss.to(device), update_loss.to(device)
 
 		epoch_loss = epoch_loss.cpu()
 		print("Epoch %d/%d loss: %.4f" % (epoch+1,epochs,epoch_loss[0]/epoch_size))
+	model.cpu()
 
 def testAccuracy(model,test_set,device = None):
 	if device is None:

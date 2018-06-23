@@ -2,7 +2,9 @@ from attacks.gradientAttacks import *
 
 from attacks.targets.cifar10 import CIFAR10ResNet,residual
 from attacks.targets.datasets import CIFAR10
-model = torch.load("cifarnetbn.pickle")
+
+def 
+model = torch.load("cifarnetbn.pkl")
 dataset = CIFAR10()
 batch_size = 400
 

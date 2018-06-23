@@ -8,37 +8,37 @@ from ..utils import *
 
 class MNISTMLP(nn.Module):
     def __init__(self):
-        super(MNISTNetMLP, self).__init__()
+        super(MNISTMLP, self).__init__()
         self.mlp = nn.Sequential(
             nn.Linear(784, 300),
             nn.ReLU(True),
             nn.Linear(300, 150),
             nn.ReLU(True),
-            nn.Linear(150, 10)
-        )
+            nn.Linear(150, 10))
 
     def forward(self, x):
         x = x.view(-1, 28*28)
         return self.mlp(x)
 
-if __name__ == "__main__":
+def trainMNISTMLP(device=None):
+    if device is None:
+        device = getDevice()
+
     net = MNISTMLP()
     mnist = MNIST()
     batch_size = 120
     trainloader = mnist.training(batch_size)
 
-    net.cuda()
-
-    print('Training Model')
+    print('Training MNIST MLP Model')
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(net.parameters(), lr=0.002)
     scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=30, gamma=0.2)
-    trainModel(net,trainloader,optimizer,criterion,15)
+    trainModel(net,trainloader,optimizer,criterion,15,device)
     
     net.eval()
     print('Finished Training, getting accuracy')
     testloader = mnist.testing()
     accuracy = testAccuracy(net,testloader)
     
-    print('Saving as: mnistConvNet.pickle')
-    torch.save(net,"mnistConvNet.pickle")
+    print('Saving as: mnistMLP.pkl')
+    torch.save(net,"mnistMLP.pkl")

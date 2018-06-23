@@ -31,7 +31,12 @@ class MNISTConvNet(nn.Module):
         x = self.fc2(x)
         return x
 
-def trainMNISTConvNet(device):
+    def dataset(self):
+        return MNIST
+
+def trainMNISTConvNet(device=None,directory = ''):
+    if device is None:
+        device = getDevice()
     net = MNISTConvNet()
     mnist = MNIST()
     batch_size = 120
@@ -49,5 +54,6 @@ def trainMNISTConvNet(device):
     testloader = mnist.testing()
     accuracy = testAccuracy(net,testloader)
     
+    model_path = os.path.join(directory, "mnistConvNet.pkl")
     print('Saving as: mnistConvNet.pkl')
-    torch.save(net,"mnistConvNet.pkl")
+    torch.save(net,model_path)

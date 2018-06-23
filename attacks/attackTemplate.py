@@ -40,15 +40,15 @@ class BaseAttack(nn.Module):
 	        	attacked images. Default 0
 	        filename: If passed will save to that file
 		"""
-		attackedImgs = self.forward(images)[:num]
-		imgs = images[:num]
-		images = numpyImages(imgs)
+		attackedImages_torch = self.forward(images)[:num]
+		images_torch = images[:num]
+		images = numpyImages(images_torch)
 
 		if model is not None:
-			outputs = model(attackedImgs)
+			outputs = model(attackedImages_torch)
 			_, attackPredicted = torch.max(outputs.data, 1)
 			if self.target is None:
-				correctOutputs = model(imgs)
+				correctOutputs = model(images_torch)
 				_, predicted = torch.max(correctOutputs.data, 1)
 				success = (predicted != attackPredicted)
 			else:
@@ -56,11 +56,11 @@ class BaseAttack(nn.Module):
 			success = success.cpu()
 			
 			# Pad with green for a successful attack, red for unsuccessful
-			padded_attack = conditionalPad(success,attackedImgs)
+			padded_attack = conditionalPad(success,attackedImages_torch)
 			attackedImages = numpyImages(padded_attack, padding=0)
 
 		else:
-			attackedImages = numpyImages(attackedImgs)
+			attackedImages = numpyImages(attackedImages_torch)
 		if diff_multiply > 0:
 			fig, axs = plt.subplots(ncols=3)
 		else:
@@ -74,14 +74,14 @@ class BaseAttack(nn.Module):
 		axs[1].yaxis.set_visible(False)
 
 		if diff_multiply > 0:
-			difference = diff_multiply*(imgs - attackedImgs)
-			difference = numpyImages(difference)
-			axs[2].imshow(difference)
+			x_diff = diff_multiply*(images_torch - attackedImages_torch)
+			x_diff = numpyImages(x_diff)
+			axs[2].imshow(x_diff)
 			axs[2].xaxis.set_visible(False)
 			axs[2].yaxis.set_visible(False)
 
 
-		if filenwame is None:
+		if filename is None:
 				plt.show()
 		else:
 			plt.savefig(filename,dpi=fig.dpi*4,bbox_inches='tight')
@@ -136,7 +136,7 @@ class BaseAttack(nn.Module):
 				else:
 					dataIterator.set_description(
 						"targeted success rate: %.5f" % (correct[0]/total[0]))
-				total, correct = total.cuda(), correct.cuda()
+				total, correct = total.to(device), correct.to(device)
 
 
 		        

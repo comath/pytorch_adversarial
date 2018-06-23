@@ -2,6 +2,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from tqdm import tqdm
 import torch
+import os
 import torchvision
 import torch.optim as optim
 import torchvision.transforms as transforms
@@ -70,7 +71,10 @@ class CIFAR10ResNet(nn.Module):
         x = self.fc1(x)
         return x
 
-def trainCIFAR10ResNet(device=None):
+    def dataset(self):
+        return CIFAR10
+
+def trainCIFAR10ResNet(device=None,directory = ''):
     if device is None:
         device = getDevice()
         
@@ -90,6 +94,6 @@ def trainCIFAR10ResNet(device=None):
     print('Finished Training, getting accuracy')
     testloader = cifar.testing()
     accuracy = testAccuracy(net,testloader)
-    
+    model_path = os.path.join(directory, "cifar10ResNet.pkl")
     print('Saving as: cifar10ResNet.pkl')
-    torch.save(net,"cifar10ResNet.pkl")
+    torch.save(net,model_path)

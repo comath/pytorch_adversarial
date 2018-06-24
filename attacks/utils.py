@@ -111,6 +111,7 @@ def testAccuracy(model,test_set,device = None):
 	if device is None:
 		device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 	cpu = torch.device("cpu")
+	model.to(device)
 
 	correct = 0.0
 	total = 0.0
@@ -124,5 +125,5 @@ def testAccuracy(model,test_set,device = None):
 
 			total += labels.size(0)
 			correct += (predicted == labels).sum().item()
-	        
+	model.to(cpu)
 	return correct/total

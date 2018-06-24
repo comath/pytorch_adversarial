@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
+import os
 
 from datasets import MNIST
 from ..utils import *
@@ -9,7 +10,7 @@ from ..utils import *
 
 class MNISTConvNet(nn.Module):
     def __init__(self):
-        super(MNISTNet, self).__init__()
+        super(MNISTConvNet, self).__init__()
         self.conv1 = nn.Conv2d(1, 16, 5,padding = 2)
         self.conv2 = nn.Conv2d(16, 16, 5,padding = 2)
         self.conv3 = nn.Conv2d(16, 8, 5)
@@ -46,8 +47,8 @@ def trainMNISTConvNet(device=None,directory = ''):
     print('Training MNIST ConvNet Model')
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(net.parameters(), lr=0.002)
-    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=30, gamma=0.2)
-    trainModel(net,trainloader,optimizer,criterion,15,device)
+    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=30, gamma=0.25)
+    trainModel(net,trainloader,optimizer,criterion,60,device)
     
     net.eval()
     print('Finished Training, getting accuracy')

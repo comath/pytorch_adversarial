@@ -17,7 +17,7 @@ except ImportError:
     class dummie_class():
         def __init__(self):
             self.mnist = 'data'
-            self.CIFAR10 = 'data'
+            self.cifar10 = 'data'
             self.imagenet_training = None
             self.imagenet_testing = None
     datasets_locations = dummie_class()

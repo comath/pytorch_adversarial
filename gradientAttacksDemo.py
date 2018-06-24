@@ -13,13 +13,13 @@ def main():
 	descr = "Demonstrate gradient attacks"
 	parser = argparse.ArgumentParser(prog=prog, description=descr)
 	parser.add_argument("-m", "--model", type=str, default=None, required=True, help="Target Model Pickle")
-	parser.add_argument("-d", "--directory", type=str, default=None, required=False, help="Base name of images")
+	parser.add_argument("-d", "--directory", type=str, default=None, required=False, help="Base location of images")
 	args = parser.parse_args()
 
-	if args.imgs is None:
+	if args.directory is None:
 		image_base = args.model.split('.')[0]
 	else:
-		image_base = args.imgs
+		image_base = args.directory
 
 	if torch.cuda.is_available():
 		print("Using GPU 0")

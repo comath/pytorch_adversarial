@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
-
+import os
 from datasets import MNIST
 from ..utils import *
 
@@ -34,9 +34,9 @@ def trainMNISTMLP(device=None,directory = ''):
 
     print('Training MNIST MLP Model')
     criterion = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(net.parameters(), lr=0.002)
-    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=30, gamma=0.2)
-    trainModel(net,trainloader,optimizer,criterion,5,device)
+    optimizer = optim.Adam(net.parameters(), lr=0.001)
+    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.5)
+    trainModel(net,trainloader,optimizer,criterion,20,device)
     
     net.eval()
     print('Finished Training, getting accuracy')

@@ -39,7 +39,7 @@ class GradientAttack(BaseAttack):
 
 		x_grad = torch.autograd.grad(J, x_adv)[0]
 		x_adv = x_adv + self.epsilon*x_grad
-		#x_adv = torch.clamp(x_adv, self.pixel_range[0], self.pixel_range[1])
+		x_adv = torch.clamp(x_adv, self.pixel_range[0], self.pixel_range[1])
 
 		return x_adv
 
@@ -63,7 +63,7 @@ class NormalizedGradientAttack(GradientAttack):
 		x_norm = x_norm.view(x_grad.size())
 
 		x_adv = x_adv + self.epsilon*x_norm
-		#x_adv = torch.clamp(x_adv, self.pixel_range[0], self.pixel_range[1])
+		x_adv = torch.clamp(x_adv, self.pixel_range[0], self.pixel_range[1])
 
 		return x_adv
 
@@ -83,6 +83,5 @@ class GradientSignAttack(GradientAttack):
 
 		x_grad = torch.autograd.grad(J, x_adv)[0]
 		x_adv = x + self.epsilon*x_grad.sign_()
-		# Defaults to 0. Which is screwed up.
-		#x_adv = torch.clamp(x_adv, self.pixel_range[0], self.pixel_range[1])
+		x_adv = torch.clamp(x_adv, self.pixel_range[0], self.pixel_range[1])
 		return x_adv

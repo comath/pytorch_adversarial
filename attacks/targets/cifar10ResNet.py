@@ -6,6 +6,7 @@ import os
 import torchvision
 import torch.optim as optim
 import torchvision.transforms as transforms
+import os
 
 from datasets import CIFAR10
 from ..utils import trainModel
@@ -88,12 +89,13 @@ def trainCIFAR10ResNet(device=None,directory = ''):
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(net.parameters(), lr=0.002)
     scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=100, gamma=0.2)
-    trainModel(device,net,trainloader,optimizer,criterion,400)
+    trainModel(net,trainloader,optimizer,criterion,400,device)
     
     net.eval()
     print('Finished Training, getting accuracy')
     testloader = cifar.testing()
     accuracy = testAccuracy(net,testloader)
+
     model_path = os.path.join(directory, "cifar10ResNet.pkl")
     print('Saving as: cifar10ResNet.pkl')
     torch.save(net,model_path)

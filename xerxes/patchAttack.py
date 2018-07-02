@@ -68,9 +68,9 @@ class AffineMaskSticker(BaseAttack):
 		self.sticker = nn.Parameter(torch.normal(mean,std))
 		
 		# Roughly in the middle
-		x = (targetShape[-1] - self.mask.size()[-1])/2
+		x = (targetShape[-1] - self.mask.size()[-1])//2
 		y = targetShape[-1] - (x + self.mask.size()[-1])
-		z = (targetShape[-2] - self.mask.size()[-2])/2
+		z = (targetShape[-2] - self.mask.size()[-2])//2
 		w = targetShape[-2] - (z + self.mask.size()[-2])
 		self.pad = nn.ConstantPad3d((x,y,z,w,0,0), 0)
 
@@ -149,7 +149,7 @@ class AffineMaskSticker(BaseAttack):
 	def usesLabels(self):
 		return False
 
-def trainPatch(masker,model,loader,optimizer,criterion,epochs,update_rate=20):
+def trainPatch_cuda(masker,model,loader,optimizer,criterion,epochs,update_rate=20):
 	epoch_size = len(loader)
 	targetLabel = masker.target
 	for epoch in range(epochs):
@@ -185,6 +185,46 @@ def trainPatch(masker,model,loader,optimizer,criterion,epochs,update_rate=20):
 
 			
 		epoch_loss = epoch_loss.cpu()
+		print("Epoch %d/%d loss: %.4f" % (epoch+1,epochs,epoch_loss[0]/epoch_size))
+				
+		#if (epoch == 0 or epoch == 9):
+			#imshow(stickered.clone().detach())
+
+
+def trainPatch(masker,model,loader,optimizer,criterion,epochs,update_rate=20):
+	epoch_size = len(loader)
+	targetLabel = masker.target
+	for epoch in range(epochs):
+		epoch_loss = torch.zeros((1,))
+		update_loss = torch.zeros((1,))
+
+		dataIterator = tqdm(enumerate(loader, 0),total = epoch_size)
+		dataIterator.set_description("update loss: %.3f, epoch loss: %.3f" % (0,0))
+		for i, data in dataIterator:
+			images, labels = data
+
+			optimizer.zero_grad()
+			stickered = masker.forward(images)
+
+
+			output = model.forward(stickered)
+			loss = criterion(output, targetLabel)
+			stickerGrad = torch.autograd.grad(loss, stickered)[0]
+
+			stickered.backward(stickerGrad)
+			optimizer.step()
+			# print statistics
+			update_loss += loss
+			if i % update_rate == update_rate - 1:    # print every 500 mini-batches
+				epoch_loss += update_loss
+				dataIterator.set_description(
+					"update loss: %.3f, epoch loss: %.3f" % (
+						update_loss[0] / update_rate,
+						epoch_loss[0]/(i + 1),
+						))
+				update_loss.zero_()
+
+			
 		print("Epoch %d/%d loss: %.4f" % (epoch+1,epochs,epoch_loss[0]/epoch_size))
 				
 		#if (epoch == 0 or epoch == 9):

@@ -1,4 +1,3 @@
-from xerxes.targets.mnistConvNet import MNISTConvNet
 from xerxes.targets.mnistMLP import MNISTMLP
 from xerxes.targets.datasets import MNIST
 from xerxes.utils import *
@@ -8,34 +7,31 @@ from skimage import io, transform, img_as_float
 from skimage.color import gray2rgb
 
 
-model = torch.load("mnistMLP.pkl")
+model1 = torch.load("models/mnistMLP.pkl")
+model2 = torch.load("models/mnistMLP.pkl")
 mnist = MNIST()
 batch_size = 400
 loader = mnist.training(batch_size)
-model.cpu()
 
-mask = np.ones((3,15,15),dtype=np.float32)
-masker = AffineMaskSticker(9,mask,(3,32,32),90,0.6,(0.2,1.2))
+mask = np.ones((1,15,15),dtype=np.float32)
+masker = AffineMaskSticker(9,mask,(1,28,28),90,0.6,(0.2,1.2))
 masker.setBatchSize(batch_size)
 
-model.cuda()
-masker.cuda()
 
 criterion = nn.CrossEntropyLoss()
 optimizer = optim.Adam([masker.sticker], lr=0.001)
 
 testset = mnist.testing(batch_size)
-untrainedError = masker.test(model,testset)
+untrainedError = masker.test(model1,testset)
 
 
-trainPatch(masker,model,loader,optimizer,criterion,5,batch_size)
+trainPatch(masker,[model1,model2],loader,optimizer,criterion,2,batch_size)
 
 trainedError = masker.test(model,testset)
 print('Untrained success rate: %.5f, Trained success rate: %.5f'%(untrainedError,trainedError))
 
 dataiter = iter(testset)
 images, labels = dataiter.next()
-images = images.cuda()
 masker.visualize(images,model,filename="sticker_attack.png")
 
 sticker = (masker.sticker + 1)/2

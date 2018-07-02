@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 import os
-from datasets import MNIST
+from .datasets import MNIST
 from ..utils import *
 
 class MNISTMLP(nn.Module):

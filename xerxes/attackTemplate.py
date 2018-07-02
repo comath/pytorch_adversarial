@@ -6,7 +6,7 @@ import torch.nn as nn
 from tqdm import tqdm
 import torch.nn.functional as F
 
-from utils import numpyImages, conditionalPad
+from .utils import numpyImages, conditionalPad
 
 class BaseAttack(nn.Module):
 	'''

@@ -4,7 +4,7 @@ import torch.nn.functional as F
 import math
 import time
 from tqdm import tqdm
-from attackTemplate import BaseAttack
+from .attackTemplate import BaseAttack
 
 
 class AffineMaskSticker(BaseAttack):
@@ -49,7 +49,7 @@ class AffineMaskSticker(BaseAttack):
 		super(AffineMaskSticker, self).__init__()
 		self.my_target = target
 		# If we wanted a png based mask, we can pass a filename rather than a numpy
-		if isinstance(mask, basestring):
+		if isinstance(mask, str):
 			from skimage import io, img_as_float
 
 			mask = img_as_float(io.imread(mask))
@@ -68,9 +68,9 @@ class AffineMaskSticker(BaseAttack):
 		self.sticker = nn.Parameter(torch.normal(mean,std))
 		
 		# Roughly in the middle
-		x = (targetShape[-1] - self.mask.size()[-1])/2
+		x = (targetShape[-1] - self.mask.size()[-1])//2
 		y = targetShape[-1] - (x + self.mask.size()[-1])
-		z = (targetShape[-2] - self.mask.size()[-2])/2
+		z = (targetShape[-2] - self.mask.size()[-2])//2
 		w = targetShape[-2] - (z + self.mask.size()[-2])
 		self.pad = nn.ConstantPad3d((x,y,z,w,0,0), 0)
 
@@ -149,9 +149,12 @@ class AffineMaskSticker(BaseAttack):
 	def usesLabels(self):
 		return False
 
-def trainPatch(masker,model,loader,optimizer,criterion,epochs,update_rate=20):
+def trainPatch_cuda(masker,models,loader,optimizer,criterion,epochs,update_rate=20):
 	epoch_size = len(loader)
 	targetLabel = masker.target
+
+
+
 	for epoch in range(epochs):
 		epoch_loss = torch.zeros((1,))
 		epoch_loss = epoch_loss.cuda()
@@ -166,9 +169,13 @@ def trainPatch(masker,model,loader,optimizer,criterion,epochs,update_rate=20):
 
 			optimizer.zero_grad()
 			stickered = masker.forward(images)
-			output = model.forward(stickered)
-			loss = criterion(output, targetLabel)
-			loss.backward()
+			stickerGrad = torch.zeros(stickered.size())
+			for model in models:
+				output = model.forward(stickered)
+				loss = criterion(output, targetLabel)
+				stickerGrad += torch.autograd.grad(loss, stickered)[0]
+
+			stickered.backward(stickerGrad)
 			optimizer.step()
 			# print statistics
 			update_loss += loss
@@ -190,51 +197,98 @@ def trainPatch(masker,model,loader,optimizer,criterion,epochs,update_rate=20):
 		#if (epoch == 0 or epoch == 9):
 			#imshow(stickered.clone().detach())
 
-if __name__ == "__main__":
-	from cifar10 import CIFAR10ResNet,residual
-	from datasets import CIFAR10
-	from utils import *
-	import torch.optim as optim
-	from skimage import io, transform, img_as_float
-	from skimage.color import gray2rgb
 
+def trainPatch(masker,models,loader,optimizer,criterion,epochs,update_rate=20):
+	epoch_size = len(loader)
+	targetLabel = masker.target
+	for epoch in range(epochs):
+		epoch_loss = torch.zeros((1,))
+		update_loss = torch.zeros((1,))
 
-	model = torch.load("cifarnetbn.pickle")
-	cifar = CIFAR10()
-	batch_size = 400
-	loader = cifar.training(batch_size)
-	model.cpu()
+		dataIterator = tqdm(enumerate(loader, 0),total = epoch_size)
+		dataIterator.set_description("update loss: %.3f, epoch loss: %.3f" % (0,0))
+		for i, data in dataIterator:
+			images, labels = data
 
-	mask = np.ones((3,15,15),dtype=np.float32)
-	masker = AffineMaskSticker(9,mask,(3,32,32),90,0.6,(0.2,1.2))
-	masker.setBatchSize(batch_size)
+			optimizer.zero_grad()
+			stickered = masker.forward(images)
+			stickerGrad = torch.zeros(stickered.size())
+			for model in models:
+				output = model.forward(stickered)
+				loss = criterion(output, targetLabel)
+				stickerGrad += torch.autograd.grad(loss, stickered)[0]
 
-	model.cuda()
-	masker.cuda()
+			stickered.backward(stickerGrad)
+			optimizer.step()
+			# print statistics
+			update_loss += loss
+			if i % update_rate == update_rate - 1:    # print every 500 mini-batches
+				epoch_loss += update_loss
+				dataIterator.set_description(
+					"update loss: %.3f, epoch loss: %.3f" % (
+						update_loss[0] / update_rate,
+						epoch_loss[0]/(i + 1),
+						))
+				update_loss.zero_()
 
-	criterion = nn.CrossEntropyLoss()
-	optimizer = optim.Adam([masker.sticker], lr=0.001)
+			
+		print("Epoch %d/%d loss: %.4f" % (epoch+1,epochs,epoch_loss[0]/epoch_size))
+				
+		#if (epoch == 0 or epoch == 9):
+			#imshow(stickered.clone().detach())
 
-	testset = cifar.testing(batch_size)
-	untrainedError = masker.test(model,testset)
-	
+class StickerTrainer():
+	def __init__(self,masker,maskerLocation = torch.device('cpu')):
+		self.masker = masker
+		self.maskerLocation = maskerLocation
+		self.modelInfos = []
 
-	trainPatch(masker,model,loader,optimizer,criterion,5,batch_size)
+	def addModel(self,model,modelLocation = torch.device('cpu')):
+		self.modelInfos.append((model,modelLocation,self.masker.target.clone().to(modelLocation)))
 
-	trainedError = masker.test(model,testset)
-	print('Untrained success rate: %.5f, Trained success rate: %.5f'%(untrainedError,trainedError))
+	def train(self,dataLoader,optimizer,criterion,epochs):
+		epoch_size = len(dataLoader)
+		targetLabel = self.masker.target
+		for epoch in range(epochs):
+			epoch_loss = torch.zeros((1,))
+			update_loss = torch.zeros((1,))
 
-	dataiter = iter(testset)
-	images, labels = dataiter.next()
-	images = images.cuda()
-	masker.visualize(images,model,filename="sticker_attack.png")
+			dataIterator = tqdm(enumerate(dataLoader, 0),total = epoch_size)
+			dataIterator.set_description("update loss: %.3f, epoch loss: %.3f" % (0,0))
+			for i, data in dataIterator:
+				images, labels = data
+				images.to(self.maskerLocation)
 
-	sticker = (masker.sticker + 1)/2
-	sticker = torch.mul(sticker,masker.mask).permute(1,2,0).detach()
-	sticker = sticker.cpu().numpy()
-	sticker = np.clip(sticker,0,1)
-	if sticker.shape[2] == 1:
-		sticker.shape = (15,15)
-		sticker = gray2rgb(sticker)
+				optimizer.zero_grad()
+				stickered = self.masker.forward(images)
+				stickerGrads = []
+				for model,loc,target in self.modelInfos:
+					thisStickered = stickered.clone().to(loc)
+					output = model.forward(thisStickered)
+					loss = criterion(output, target)
+					stickerGrads.append(torch.autograd.grad(loss, thisStickered)[0])
+				
+				stickerGrad = torch.zeros(stickered.size(), device = self.maskerLocation)
+				for sg in stickerGrads:
+					sg = sg.to(self.maskerLocation)
+					stickerGrad += sg
 
-	io.imsave("sticker.png",sticker)
+				stickered.backward(stickerGrad)
+				optimizer.step()
+				# print statistics
+				'''
+				update_loss += loss
+				if i % update_rate == update_rate - 1:    # print every 500 mini-batches
+					epoch_loss += update_loss
+					dataIterator.set_description(
+						"update loss: %.3f, epoch loss: %.3f" % (
+							update_loss[0] / update_rate,
+							epoch_loss[0]/(i + 1),
+							))
+					update_loss.zero_()
+				'''
+				
+			print("Epoch %d/%d loss: %.4f" % (epoch+1,epochs,epoch_loss[0]/epoch_size))
+			
+			#if (epoch == 0 or epoch == 9):
+				#imshow(stickered.clone().detach())

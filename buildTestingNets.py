@@ -1,6 +1,6 @@
-from attacks.targets.mnistMLP import trainMNISTMLP
-from attacks.targets.cifar10ResNet import trainCIFAR10ResNet
-from attacks.targets.mnistConvNet import trainMNISTConvNet
+from xerxes.targets.mnistMLP import trainMNISTMLP
+from xerxes.targets.cifar10ResNet import trainCIFAR10ResNet
+from xerxes.targets.mnistConvNet import trainMNISTConvNet
 import torch
 import os
 
@@ -11,7 +11,7 @@ def main():
 	descr = "Build target models for attack testing purposes"
 	parser = argparse.ArgumentParser(prog=prog, description=descr)
 	parser.add_argument("-m", "--model", type=str, default=None, required=False, help="Target Model")
-	parser.add_argument("-d", "--directory", type=str, default=None, required=False, help="Base location of models")
+	parser.add_argument("-d", "--directory", type=str, default='./', required=False, help="Base location of models")
 	args = parser.parse_args()
 
 	targetModels = {"mnistMLP":trainMNISTMLP,"mnistConvNet":trainMNISTConvNet,"cifar10ResNet":trainCIFAR10ResNet}

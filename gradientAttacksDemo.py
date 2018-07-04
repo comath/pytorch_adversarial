@@ -23,11 +23,11 @@ def main():
 
 	if torch.cuda.is_available():
 		print("Using GPU 0")
-		device = torch.device("cuda:0")
+		device = torch.cuda()
 	else:
 		print("No GPU, using CPU")
-		device = torch.device("cpu")
-	cpu = torch.device("cpu")
+		device = torch.cpu()
+	cpu = torch.cpu()
 
 
 	model = torch.load(args.model)

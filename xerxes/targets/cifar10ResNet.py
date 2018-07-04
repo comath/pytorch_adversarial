@@ -8,7 +8,7 @@ import torch.optim as optim
 import torchvision.transforms as transforms
 import os
 
-from datasets import CIFAR10
+from .datasets import CIFAR10
 from ..utils import trainModel
 
 class residual(nn.Module):

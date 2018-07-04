@@ -6,7 +6,7 @@ import torch.nn as nn
 from tqdm import tqdm
 import torch.nn.functional as F
 
-from utils import numpyImages, conditionalPad
+from .utils import numpyImages, conditionalPad
 
 class BaseAttack(nn.Module):
 	'''
@@ -107,6 +107,9 @@ class BaseAttack(nn.Module):
 		dataIterator.set_description("untargeted success rate: %.5f" % 0)
 		update_rate = 10
 
+		self.to(device)
+		model.to(device)
+
 		for i,data in dataIterator:
 			images, labels = data
 			images = images.to(device)
@@ -141,4 +144,6 @@ class BaseAttack(nn.Module):
 
 		        
 		correct, total = correct.to(cpu), total.to(cpu)
+		self.to(cpu)
+		model.to(cpu)
 		return correct[0]/total[0]

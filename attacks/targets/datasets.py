@@ -1,5 +1,6 @@
 import torch
 import torchvision
+from torchvision import transforms, utils, datasets
 import torchvision.transforms as transforms
 
 '''
@@ -14,6 +15,7 @@ imagenet_testing = None     #Directory of Imagenet testing
 try:
     import datasets_locations
 except ImportError:
+    print("SHIT")
     class dummie_class():
         def __init__(self):
             self.mnist = 'data'
@@ -94,12 +96,10 @@ class IMAGENET(DATASET):
 
         self.trainset = datasets.ImageFolder(
             datasets_locations.imagenet_training,
-            train=True,
             transform=transform)
 
         self.testset = datasets.ImageFolder(
             datasets_locations.imagenet_testing, 
-            train=False,
             transform=__transform_testing__())
 
         self.classes = imagenetDict

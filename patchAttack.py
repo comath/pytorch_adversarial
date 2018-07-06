@@ -5,7 +5,7 @@ import math
 import time
 from tqdm import tqdm
 from .attackTemplate import BaseAttack
-from .ensembleUtils import modelGradContainer
+from .ensembleUtils import ModelGrad
 
 
 class AffineMaskSticker(BaseAttack):
@@ -252,7 +252,7 @@ class StickerTrainer():
 			model = models[i]
 			model.cuda(i)
 			wrappedModel = ModelGrad(model,losses[i])
-			self.wrappedModel.append(wrappedModel)
+			self.wrappedModels.append(wrappedModel)
 
 	def train(self,dataLoader,optimizer,epochs):
 		# Setup threads
@@ -269,17 +269,17 @@ class StickerTrainer():
 			dataIterator.set_description("update loss: %.3f, epoch loss: %.3f" % (0,0))
 			for i, data in dataIterator:
 				images, labels = data
-				images.to(self.maskerLocation)
+				images = images.cuda(self.maskerLocation)
 
-				optimizer.zero_grad()
 				stickered = self.masker(images)
 				stickers = torch.cuda.comm.broadcast(stickered,[self.maskerLocation,1])
 
-				stickerGrads = parallel_apply(self.wrappedModels, zip(stickers,targetLabels))
+				stickerGrads = nn.parallel.parallel_apply(self.wrappedModels, zip(stickers,targetLabels))
 				
 				stickerGrad = torch.cuda.comm.reduce_add(stickerGrads, 
 					destination=self.maskerLocation)
 
+				optimizer.zero_grad()
 				stickered.backward(stickerGrad)
 				optimizer.step()
 				# print statistics
@@ -299,3 +299,71 @@ class StickerTrainer():
 			
 			#if (epoch == 0 or epoch == 9):
 				#imshow(stickered.clone().detach())
+'''
+def patchTrainingStep(bits,images):
+	masker,wrappedModel = bits
+	stickered = self.masker(images)
+	stickers = torch.cuda.comm.scatter(stickered,[0,1])
+
+	stickerGrads = wrappedModel(stickers)
+
+	stickered.backward(stickerGrad)
+	optimizer.step()
+
+class StickerTrainer2():
+	def __init__(self,masker,models,losses,batch_size):
+		self.maskers = replicate(masker,[0,1])
+		self.wrappedModels = []
+		assert len(models) == torch.cuda.device_count()
+		assert len(models) == len(losses)
+		for i in range(torch.cuda.device_count()):
+			model = models[i]
+			model.cuda(i)
+			wrappedModel = ModelGrad(model,losses[i])
+			self.wrappedModels.append(wrappedModel)
+
+	def train(self,dataLoader,optimizer,epochs):
+		# Setup threads
+
+		epoch_size = len(dataLoader)
+		targetLabel = self.masker.target.cuda(self.maskerLocation)
+		targetLabels = torch.cuda.comm.scatter(targetLabel,[0,1])
+
+		bits = zip(self.maskers,self.wrappedModels)
+
+		for (masker,model), labels in zip(bits,targetLabels):
+			masker.setBatchSize(len(labels))
+			model.setY(labels)
+
+		for epoch in range(epochs):
+			epoch_loss = torch.zeros((1,))
+			update_loss = torch.zeros((1,))
+
+			dataIterator = tqdm(enumerate(dataLoader, 0),total = epoch_size)
+			dataIterator.set_description("update loss: %.3f, epoch loss: %.3f" % (0,0))
+			for i, data in dataIterator:
+				optimizer.zero_grad()
+				images, labels = data
+				images = torch.cuda.comm.scatter(images, [0,1])
+
+				stickerGrads = nn.parallel.parallel_apply(patchTrainingStep, zip(bits,targetLabels))
+				
+				# print statistics
+				
+				update_loss += loss
+				if i % update_rate == update_rate - 1:    # print every 500 mini-batches
+					epoch_loss += update_loss
+					dataIterator.set_description(
+						"update loss: %.3f, epoch loss: %.3f" % (
+							update_loss[0] / update_rate,
+							epoch_loss[0]/(i + 1),
+							))
+					update_loss.zero_()
+				
+				
+			print("Epoch %d/%d loss: %.4f" % (epoch+1,epochs,epoch_loss[0]/epoch_size))
+			
+			#if (epoch == 0 or epoch == 9):
+				#imshow(stickered.clone().detach())
+
+'''

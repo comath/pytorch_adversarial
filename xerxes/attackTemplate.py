@@ -40,7 +40,7 @@ class BaseAttack(nn.Module):
 	        	attacked images. Default 0
 	        filename: If passed will save to that file
 		"""
-		attackedImages_torch = self.forward(images)[:num]
+		attackedImages_torch = self.__call__(images)[:num]
 		images_torch = images[:num]
 		images = numpyImages(images_torch)
 
@@ -144,6 +144,4 @@ class BaseAttack(nn.Module):
 
 		        
 		correct, total = correct.to(cpu), total.to(cpu)
-		self.to(cpu)
-		model.to(cpu)
 		return correct[0]/total[0]

@@ -15,6 +15,8 @@ class MNISTMLP(nn.Module):
             nn.Linear(300, 150),
             nn.ReLU(True),
             nn.Linear(150, 10))
+        self.add_module("3_layer",self.mlp)
+
 
     def forward(self, x):
         x = x.view(-1, 28*28)

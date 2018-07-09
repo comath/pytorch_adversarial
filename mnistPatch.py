@@ -13,41 +13,46 @@ model2 = torch.load("models/mnistConvNet.pkl")
 mnist = MNIST()
 batch_size = 400
 loader = mnist.training(batch_size)
+testset = mnist.testing(batch_size)
 
 mask = np.ones((1,15,15),dtype=np.float32)
-masker = AffineMaskSticker(9,mask,(1,28,28),90,0.6,(0.2,1.2))
-masker.setBatchSize(batch_size)
+sticker = AdversarialSticker(mask,0)
+placer = AffinePlacer(mask,(1,28,28),90,0.6,(0.2,1.2))
+stickerAttack = StickerAttack(sticker,placer,9)
 
-cudaDevice = torch.device("cuda:0")
 
-model2.to(cudaDevice)
 
 criterion = nn.CrossEntropyLoss()
-optimizer = optim.Adam([masker.sticker], lr=0.1)
+optimizer = optim.Adam([sticker.sticker], lr=0.1)
+untrainedError = stickerAttack.test(model1,testset)
 
-testset = mnist.testing(batch_size)
-untrainedError = masker.test(model1,testset)
+model1 = model1.cuda(0)
+stickerAttack = stickerAttack.cuda(0)
+model2 = model2.cuda(1)
+
+stickerTrainer = StickerTrainer(stickerAttack,[model1,model2],[criterion,criterion])
+
+import cProfile
+
+stickerTrainer.train(loader,optimizer,15)
 
 
-stickerTrainer = StickerTrainer(masker)
-stickerTrainer.addModel(model1)
-#stickerTrainer.addModel(model2,cudaDevice)
-stickerTrainer.train(loader,optimizer,criterion,15)
-
-trainedError = masker.test(model2,testset)
+trainedError = stickerAttack.test(model2,testset)
 print('Untrained success rate: %.5f, Trained success rate: %.5f'%(untrainedError,trainedError))
-
+stickerAttack = stickerAttack.cuda(0)
 dataiter = iter(testset)
 images, labels = dataiter.next()
-masker.visualize(images,model1,filename="sticker_attack.png")
-masker.visualize(images,model2,filename="sticker_attack.png")
+images = images.cuda(0)
+stickerAttack.visualize(images,model1,filename="sticker_attack.png")
+model2 = model2.cuda(0)
+stickerAttack.visualize(images,model2,filename="sticker_attack.png")
 
-sticker = (masker.sticker + 1)/2
-sticker = torch.mul(sticker,masker.mask).permute(1,2,0).detach()
+sticker = (sticker() + 1)/2
+sticker = sticker.permute(1,2,0).detach()
 sticker = sticker.cpu().numpy()
 sticker = np.clip(sticker,0,1)
 if sticker.shape[2] == 1:
 	sticker.shape = (15,15)
 	sticker = gray2rgb(sticker)
 
-io.imsave("sticker.png",sticker)
+io.imsave("ai_sticker_%f_mnistConv_mlp_v2.png"%(trainedError),sticker)

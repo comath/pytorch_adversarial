@@ -15,7 +15,6 @@ imagenet_testing = None     #Directory of Imagenet testing
 try:
     import datasets_locations
 except ImportError:
-    print("SHIT")
     class dummie_class():
         def __init__(self):
             self.mnist = 'data'

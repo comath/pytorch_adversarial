@@ -6,36 +6,9 @@ import time
 from tqdm import tqdm
 from .attackTemplate import BaseAttack
 from .ensembleUtils import ModelGrad
-from .utils import *
 
 
-class AdversarialSticker(nn.Module):
-	def __init__(self,mask,mean,std = 0.1):
-		super(AdversarialSticker, self).__init__()
-
-		if isinstance(mask, str):
-			from skimage import io, img_as_float
-			mask = img_as_float(io.imread(mask))
-			mask = mask.transpose(2,0,1)
-
-		self.mask = torch.from_numpy(mask)
-		self.mask = self.mask.type(torch.FloatTensor)
-		self.mask = nn.Parameter(self.mask,requires_grad = False)
-
-		self.mean = mean
-		zero_mean = torch.zeros(self.mask.size())
-		std = std*torch.ones(self.mask.size())
-		self.sticker = nn.Parameter(torch.normal(mean,std))
-
-	def forward(self):
-		maskedSticker = self.mean + self.sticker 						# place it in the middle of the pixel space
-		maskedSticker = torch.mul(self.sticker,self.mask)
-		return maskedSticker
-
-	def size(self):
-		return self.mask.size()
-
-class AffinePlacer(nn.Module):
+class AffineMaskSticker(BaseAttack):
 	"""
 	Given a mask that can be a png image or an numpy array this creates a sticker. After creation
 	you must set the mini-batch size, before shipping it to the GPU.
@@ -66,23 +39,34 @@ class AffinePlacer(nn.Module):
 		
 	"""
 	def __init__(self,
+		target,
 		mask,
 		targetShape,
 		maxRotation,
 		maxTranslation,
-		scale):
-		super(AffinePlacer, self).__init__()
+		scale,
+		mean= 0.0,
+		std = 0.1):
+		super(AffineMaskSticker, self).__init__()
+		self.my_target = target
 		# If we wanted a png based mask, we can pass a filename rather than a numpy
-		# We want the gradient to be applied as if it were centered ao the mean, but for regularization to recenter it. So we let the thing be at 0
-		
 		if isinstance(mask, str):
 			from skimage import io, img_as_float
+
 			mask = img_as_float(io.imread(mask))
+
 			mask = mask.transpose(2,0,1)
+
 
 		self.mask = torch.from_numpy(mask)
 		self.mask = self.mask.type(torch.FloatTensor)
 		self.mask = nn.Parameter(self.mask,requires_grad = False)
+
+		# We want the gradient to be applied as if it were centered ao the mean, but for regularization to recenter it. So we let the thing be at 0
+		self.mean = mean
+		zero_mean = torch.zeros(self.mask.size())
+		std = std*torch.ones(self.mask.size())
+		self.sticker = nn.Parameter(torch.normal(mean,std))
 		
 		# Roughly in the middle
 		x = (targetShape[-1] - self.mask.size()[-1])//2
@@ -90,7 +74,6 @@ class AffinePlacer(nn.Module):
 		z = (targetShape[-2] - self.mask.size()[-2])//2
 		w = targetShape[-2] - (z + self.mask.size()[-2])
 		self.pad = nn.ConstantPad3d((x,y,z,w,0,0), 0)
-		self.add_module("pad",self.pad)
 
 		# The boundaries of the rotation, translation and scaling
 		self.boundaries = nn.Parameter(torch.zeros(4,4),requires_grad=False)
@@ -108,63 +91,44 @@ class AffinePlacer(nn.Module):
 		self.boundaries[3,3] = (1.0/1000.0)*2*maxTranslation		#y
 		self.offsets[3] = -maxTranslation
 
-		self.batch_size = 0
-		self.placedMask = None
-		self.aff = None
-		self.samples = None
-
-	def __setBatchSize__(self,batch_size):
+	def setBatchSize(self,batch_size):
 		'''
 		This preallocates the buffers for the random affine transformations
 		'''
 		self.batch_size = batch_size
-		if self.samples is not None:
-			del self.samples
 		self.samples = torch.Tensor(batch_size,4).type(torch.FloatTensor)
-		self.samples = self.samples.to(self.boundaries.device)
 		self.samples = nn.Parameter(self.samples,requires_grad=False)
-		if self.placedMask is not None:
-			del self.placedMask
 		self.placedMask = 1-self.pad(self.mask)
 		self.placedMask = self.placedMask.unsqueeze_(0)
 		self.placedMask = self.placedMask.expand(self.batch_size,-1,-1,-1)
-		self.placedMask = self.placedMask.to(self.boundaries.device)
 		self.placedMask = nn.Parameter(self.placedMask,requires_grad=False)
-		if self.aff is not None:
-			del self.aff
-		self.aff = torch.zeros((self.batch_size,2,3))
-		self.aff = self.aff.to(self.boundaries.device)
-		self.aff = nn.Parameter(self.aff,requires_grad=False)
+		self.aff = nn.Parameter(torch.zeros((self.batch_size,2,3)),requires_grad=False)
 
-	def __setAff__(self,S,scale = None):
+	@property
+	def target(self):
+		targetLabel = torch.full([self.batch_size],self.my_target,dtype=torch.long)
+		targetLabel = targetLabel.to(self.aff.device)
+		return targetLabel
+
+	def __setAff__(self,S):
 		'''
 		Takes the random samples, S and converts it into 2d affine transformations
 		'''
-		if scale is None:
-			self.aff[:, 0, 0] = (1/S[:,1])*S[:,0].cos()
-			self.aff[:, 0, 1] = (1/S[:,1])*S[:,0].sin()
-			self.aff[:, 1, 0] = (1/S[:,1])*(-S[:,0]).sin()
-			self.aff[:, 1, 1] = (1/S[:,1])*S[:,0].cos()
-			self.aff[:, 0, 2] = S[:,2]
-			self.aff[:, 1, 2] = S[:,3]
-		else:
-			self.aff[:, 0, 0] = (1/scale)*S[:,0].cos()
-			self.aff[:, 0, 1] = (1/scale)*S[:,0].sin()
-			self.aff[:, 1, 0] = (1/scale)*(-S[:,0]).sin()
-			self.aff[:, 1, 1] = (1/scale)*S[:,0].cos()
-			self.aff[:, 0, 2] = S[:,2]
-			self.aff[:, 1, 2] = S[:,3]
+		self.aff[:, 0, 0] = (1/S[:,1])*S[:,0].cos()
+		self.aff[:, 0, 1] = (1/S[:,1])*S[:,0].sin()
+		self.aff[:, 1, 0] = (1/S[:,1])*(-S[:,0]).sin()
+		self.aff[:, 1, 1] = (1/S[:,1])*S[:,0].cos()
+		self.aff[:, 0, 2] = S[:,2]
+		self.aff[:, 1, 2] = S[:,3]
 
-	def forward(self,images,sticker,scale = None):
+	def forward(self,images):
 		'''
 		Places the sticker on the image with a random translation
 		With a batch it applies the same translation.
 		'''
-		if self.batch_size != images.size()[0]:
-			self.__setBatchSize__(images.size()[0])
-
-		
-		maskedSticker = self.pad(sticker)
+		maskedSticker = self.mean + self.sticker 						# place it in the middle of the pixel space
+		maskedSticker = torch.mul(self.sticker,self.mask)
+		maskedSticker = self.pad(maskedSticker)
 		maskedSticker = maskedSticker.unsqueeze_(0)
 		maskedSticker = maskedSticker.expand(self.batch_size,-1,-1,-1)
 
@@ -174,48 +138,17 @@ class AffinePlacer(nn.Module):
 
 
 		affineGrid = F.affine_grid(self.aff,images.size())
-		placedMask = 1-F.grid_sample(1-self.placedMask,affineGrid,padding_mode='zeros')
+		placedMask = F.grid_sample(self.placedMask,affineGrid,padding_mode='border')
 		maskedSticker = F.grid_sample(maskedSticker,affineGrid)
 
 		maskedImage = torch.mul(images,placedMask)
-		stickered = maskedSticker + maskedImage		
+		stickered = maskedSticker + maskedImage
 
 		return stickered
-
-class StickerAttack(BaseAttack):
-	def __init__(self,sticker,placer,target):
-		super(StickerAttack, self).__init__()
-
-		self.sticker = sticker
-		self.placer = placer
-		self.my_target = target
-		self.batchSize = 0
-		self.targetLabel = None
-
-	def __setBatchSize__(self,batchSize):
-		self.batchSize = batchSize
-		if self.targetLabel is not None:
-			del self.targetLabel
-		self.targetLabel = torch.full([self.batchSize],self.my_target,dtype=torch.long)
-		self.targetLabel = self.targetLabel.to(self.sticker.sticker.device)
-
-	def forward(self,images,scale = None):
-		if self.batchSize != images.size()[0]:
-			self.__setBatchSize__(images.size()[0])
-		sticker = self.sticker()
-		placedSticker = self.placer(images,sticker,scale)
-		return placedSticker
-
-	@property
-	def target(self):
-		if self.targetLabel is None:
-			raise AttributeError("set the batch size or call forward first")
-		return self.targetLabel
 
 	@property
 	def usesLabels(self):
 		return False
-
 
 def trainPatch_cuda(masker,models,loader,optimizer,criterion,epochs,update_rate=20):
 	epoch_size = len(loader)
@@ -225,6 +158,7 @@ def trainPatch_cuda(masker,models,loader,optimizer,criterion,epochs,update_rate=
 
 	for epoch in range(epochs):
 		epoch_loss = torch.zeros((1,))
+		epoch_loss = epoch_loss.cuda()
 		update_loss = torch.zeros((1,))
 		update_loss = update_loss.cuda()
 
@@ -247,15 +181,15 @@ def trainPatch_cuda(masker,models,loader,optimizer,criterion,epochs,update_rate=
 			# print statistics
 			update_loss += loss
 			if i % update_rate == update_rate - 1:    # print every 500 mini-batches
-				update_loss = update_loss.cpu()
 				epoch_loss += update_loss
+				epoch_loss, update_loss = epoch_loss.cpu(), update_loss.cpu()
 				dataIterator.set_description(
 					"update loss: %.3f, epoch loss: %.3f" % (
 						update_loss[0] / update_rate,
 						epoch_loss[0]/(i + 1),
 						))
 				update_loss.zero_()
-				update_loss = update_loss.cuda()
+				epoch_loss, update_loss = epoch_loss.cuda(), update_loss.cuda()
 
 			
 		epoch_loss = epoch_loss.cpu()
@@ -265,7 +199,7 @@ def trainPatch_cuda(masker,models,loader,optimizer,criterion,epochs,update_rate=
 			#imshow(stickered.clone().detach())
 
 
-def trainPatch(masker,model,loader,optimizer,criterion,epochs,update_rate=20):
+def trainPatch(masker,models,loader,optimizer,criterion,epochs,update_rate=20):
 	epoch_size = len(loader)
 	targetLabel = masker.target
 	for epoch in range(epochs):
@@ -306,68 +240,63 @@ def trainPatch(masker,model,loader,optimizer,criterion,epochs,update_rate=20):
 			#imshow(stickered.clone().detach())
 
 
-
-def trainingStep(sticker,placer,model,lossfn,images,targetLabel):
-	sticker = sticker.requires_grad_()
-	stickered = placer(images,sticker)
-	y = model(stickered)
-	loss = lossfn(y,targetLabel)
-	stickerGrad = torch.autograd.grad(loss, sticker)[0]
-	return stickerGrad,loss
-
-def averageStickers(maskers):
-	stickers = [masker.sticker for masker in maskers]
-	stickers = torch.cuda.comm.reduce_add(stickers,0)
-	sticker  = stickers[0]/len(stickers)
-	stickers = torch.cuda.comm.broadcast(stickers,[0,1])
-	for masker,sticker in zip(maskers,stickers):
-		masker.sticker.data = sticker.data 
-
 class StickerTrainer():
-	def __init__(self,stickerAttack,models,losses):
-		self.attack = stickerAttack
-		self.sticker = stickerAttack.sticker
-		self.sticker.cuda(0)
-		self.placers = nn.parallel.replicate(stickerAttack.placer, [0,1])
-		self.trainingSteps = [trainingStep for i in range(2)]
-		self.lossFns = losses
-		self.models = models
+	def __init__(self,masker,models,losses,maskerLocation = 0):
+		self.masker = masker
+		self.masker.cuda(maskerLocation)
+		self.maskerLocation = maskerLocation
+		self.wrappedModels = []
 		assert len(models) == torch.cuda.device_count()
 		assert len(models) == len(losses)
-		
+		for i in range(torch.cuda.device_count()):
+			model = models[i]
+			model.cuda(i)
+			wrappedModel = ModelGrad(model,losses[i])
+			self.wrappedModels.append(wrappedModel)
 
-	def train(self,dataLoader,optimizer,epochs,update_rate = 20):
+	def train(self,dataLoader,optimizer,epochs):
 		# Setup threads
 
 		epoch_size = len(dataLoader)
-		images,labels = iter(dataLoader).next()
-		self.attack.__setBatchSize__(images.size()[0])
-		targetLabels = self.attack.target
-		targetLabels = torch.cuda.comm.scatter(targetLabels,[0,1])
+		targetLabel = self.masker.target.cuda(self.maskerLocation)
+		targetLabels = torch.cuda.comm.broadcast(targetLabel,[self.maskerLocation,1])
 
 		for epoch in range(epochs):
 			epoch_loss = torch.zeros((1,))
 			update_loss = torch.zeros((1,))
-			update_loss = update_loss.cuda()
 
 			dataIterator = tqdm(enumerate(dataLoader, 0),total = epoch_size)
 			dataIterator.set_description("update loss: %.3f, epoch loss: %.3f" % (0,0))
 			for i, data in dataIterator:
 				images, labels = data
-				images = torch.cuda.comm.scatter(images,[0,1])
+				images = images.cuda(self.maskerLocation)
 
-				#print(images[0].size(),images[1].size())
-				sticker = self.sticker()
-				optimizer.zero_grad()
-				stickers = torch.cuda.comm.broadcast(sticker,[0,1])
-				gradsAndLoses = nn.parallel.parallel_apply(self.trainingSteps,zip(stickers,self.placers,self.models,self.lossFns,images,targetLabels))
-				grads, losses = zip(*gradsAndLoses)
-				grad = torch.cuda.comm.reduce_add(grads,0)
-				sticker.backward(grad)
-				optimizer.step()
-				#averageStickers(self.maskers)
+				stickered = self.masker(images)
+				stickers = torch.cuda.comm.broadcast(stickered,[self.maskerLocation,1])
+
+				stickerGrads = nn.parallel.parallel_apply(self.wrappedModels, zip(stickers,targetLabels))
 				
-					
+				stickerGrad = torch.cuda.comm.reduce_add(stickerGrads, 
+					destination=self.maskerLocation)
+
+				optimizer.zero_grad()
+				stickered.backward(stickerGrad)
+				optimizer.step()
+				# print statistics
+				'''
+				update_loss += loss
+				if i % update_rate == update_rate - 1:    # print every 500 mini-batches
+					epoch_loss += update_loss
+					dataIterator.set_description(
+						"update loss: %.3f, epoch loss: %.3f" % (
+							update_loss[0] / update_rate,
+							epoch_loss[0]/(i + 1),
+							))
+					update_loss.zero_()
+				'''
+				
+			print("Epoch %d/%d loss: %.4f" % (epoch+1,epochs,epoch_loss[0]/epoch_size))
+			
 			#if (epoch == 0 or epoch == 9):
 				#imshow(stickered.clone().detach())
 '''
@@ -395,15 +324,6 @@ class StickerTrainer2():
 
 	def train(self,dataLoader,optimizer,epochs):
 		# Setup threads
-=======
-				stickered = self.masker(images)
-				stickers = torch.cuda.comm.broadcast(stickered,[self.maskerLocation,1])
-
-				stickerGrads = parallel_apply(self.wrappedModels, zip(stickers,targetLabels))
-				
-				stickerGrad = torch.cuda.comm.reduce_add(stickerGrads, 
-					destination=self.maskerLocation)
->>>>>>> 3ac22ba000b648d35131da816df6cc70b1f3719b
 
 		epoch_size = len(dataLoader)
 		targetLabel = self.masker.target.cuda(self.maskerLocation)

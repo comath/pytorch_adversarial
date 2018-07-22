@@ -1,5 +1,6 @@
 from xerxes.targets.mnistMLP import trainMNISTMLP
 from xerxes.targets.cifar10ResNet import trainCIFAR10ResNet
+from xerxes.targets.cifar10Deep import trainCIFAR10Deep
 from xerxes.targets.mnistConvNet import trainMNISTConvNet
 import torch
 import os
@@ -14,7 +15,11 @@ def main():
 	parser.add_argument("-d", "--directory", type=str, default='./', required=False, help="Base location of models")
 	args = parser.parse_args()
 
-	targetModels = {"mnistMLP":trainMNISTMLP,"mnistConvNet":trainMNISTConvNet,"cifar10ResNet":trainCIFAR10ResNet}
+	targetModels = {
+		"mnistMLP":trainMNISTMLP,
+		"mnistConvNet":trainMNISTConvNet,
+		"cifar10ResNet":trainCIFAR10ResNet,
+		"cifar10Deep":trainCIFAR10Deep}
     
 	if not (args.model in targetModels.keys() or args.model is None):
 		model_parse_error = "{} is not a supported model, try:\n".format(args.model)

@@ -56,5 +56,5 @@ def trainMNISTConvNet(device=None,directory = ''):
     accuracy = testAccuracy(net,testloader)
     
     model_path = os.path.join(directory, "mnistConvNet.pkl")
-    print('Saving as: mnistConvNet.pkl')
+    print('Saving as: mnistConvNet.pkl, with accuracy %.4f'%(accuracy,))
     torch.save(net,model_path)

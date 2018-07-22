@@ -14,6 +14,7 @@ def getDevice():
 	else:
 		print("No GPU, using CPU")
 		device = torch.device("cpu")
+	return device
 
 def numpyImages(imgs,padding=2):
 	numPerRow = int(sqrt(imgs.size()[0]))

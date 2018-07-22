@@ -9,10 +9,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from xerxes.patchAttack import *
+from xerxes.patchAttack.Trainer import *
 from xerxes.utils import *
 from xerxes.targets.datasets import IMAGENET
-
-
 
 batch_size = 50
 imgnet = IMAGENET()
@@ -26,32 +25,41 @@ print(imgs.var())
 
 mask = np.ones((3,224,224),dtype=np.float32)
 
-model1 = torchvision.models.resnet101(pretrained=True)
-model2 = torchvision.models.resnet50(pretrained=True)
+model1 = torchvision.models.vgg16_bn(pretrained=True)
+model2 = torchvision.models.alexnet(pretrained=True)
+model3 = torchvision.models.densenet169(pretrained=True)
+model4 = torchvision.models.resnet50(pretrained=True)
+
+model_test = torchvision.models.vgg19_bn(pretrained=True).cuda()
 
 sticker = AdversarialSticker(mask,0.5)
 placer = AffinePlacer(mask,(3,224,224),90,0.6,(0.05,1.0))
 stickerAttack = StickerAttack(sticker,placer,346)
 
 criterion = nn.CrossEntropyLoss()
-optimizer = optim.SGD([sticker.sticker], lr= 0.01, weight_decay=0.0001)
+optimizer = optim.SGD([sticker.sticker], lr= 5)
 scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.1)
 
-stickerAttack = stickerAttack.cuda(0)
-model2 = model2.cuda(0)
-untrainedError = stickerAttack.test(model2,loader)
+#untrainedError = stickerAttack.test(model2,loader)
 
-model1 = model1.cuda(0)
-model2 = model2.cuda(1)
-stickerAttack = stickerAttack.cuda(0)
-
-stickerTrainer = StickerTrainer(stickerAttack,[model1,model2],[criterion,criterion])
+stickerTrainer = StickerTrainer(
+		sticker,
+			[model1,
+			model2,
+			model3,
+			model4],
+		[criterion,
+		criterion,
+		criterion,
+		criterion],
+		346,
+		placer)
 stickerTrainer.train(loader,optimizer,10)
 torch.save(sticker,"sticker_sgd.pkl")
 
 model2 = model2.cuda(0)
 trainedError = stickerAttack.test(model2,loader)
-print('Untrained success rate: %.5f, Trained success rate: %.5f'%(untrainedError,trainedError))
+print('Trained success rate: %.5f'%(trainedError,))
 stickerAttack = stickerAttack.cuda(0)
 dataiter = iter(loader)
 images, labels = dataiter.next()

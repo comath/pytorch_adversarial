@@ -9,8 +9,7 @@ import torchvision.transforms as transforms
 import os
 
 from .datasets import CIFAR10
-from ..utils import trainModel
-
+from ..utils import *
 class residual(nn.Module):
     def __init__(self,nxn,connections,padding):
         super(residual, self).__init__()
@@ -81,15 +80,15 @@ def trainCIFAR10ResNet(device=None,directory = ''):
         
     net = CIFAR10ResNet(3)
     cifar = CIFAR10()
-    batch_size = 250
+    batch_size = 240
     trainloader = cifar.training(batch_size)
     
 
     print('Training CIFAR10 ResNet Model')
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(net.parameters(), lr=0.002)
-    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=100, gamma=0.2)
-    trainModel(net,trainloader,optimizer,criterion,400,device)
+    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.75)
+    trainModel(net,trainloader,optimizer,criterion,200)
     
     net.eval()
     print('Finished Training, getting accuracy')
@@ -97,5 +96,5 @@ def trainCIFAR10ResNet(device=None,directory = ''):
     accuracy = testAccuracy(net,testloader)
 
     model_path = os.path.join(directory, "cifar10ResNet.pkl")
-    print('Saving as: cifar10ResNet.pkl')
+    print('Saving as: cifar10ResNet.pkl, with accuracy %.4f'%(accuracy,))
     torch.save(net,model_path)

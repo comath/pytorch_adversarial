@@ -46,5 +46,5 @@ def trainMNISTMLP(device=None,directory = ''):
     accuracy = testAccuracy(net,testloader)
     
     model_path = os.path.join(directory, "mnistMLP.pkl")
-    print('Saving as: mnistMLP.pkl')
+    print('Saving as: mnistMLP.pkl, with accuracy %.4f'%(accuracy,))
     torch.save(net,model_path)

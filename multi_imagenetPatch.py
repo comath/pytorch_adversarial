@@ -35,8 +35,9 @@ model4 = torchvision.models.resnet50(pretrained=True)
 model_test = torchvision.models.vgg19_bn(pretrained=True).cuda()
 
 os.mkdir("./SGD/")
-for i in range(1,21):
+for i in range(1,6):
 	for j in range(2):
+		learningRate = i *  1.0
 		mask = np.ones((3,224,224),dtype=np.float32)
 
 
@@ -46,11 +47,11 @@ for i in range(1,21):
 
 		criterion = nn.CrossEntropyLoss()
 		if j > 0:
-			optimizer = optim.SGD([sticker.sticker], lr= i/3.0, weight_decay = 0.001)
-			os.mkdir("./SGD/%.3f_wd0.001/"%(i/3.0,))
+			optimizer = optim.SGD([sticker.sticker], lr= learningRate, weight_decay = 0.001)
+			os.mkdir("./SGD/%.3f_wd0.001/"%(learningRate,))
 		else:
-			optimizer = optim.SGD([sticker.sticker], lr= i/3.0)
-			os.mkdir("./SGD/%.3f/"%(i/3.0,))
+			optimizer = optim.SGD([sticker.sticker], lr= learningRate)
+			os.mkdir("./SGD/%.3f/"%(learningRate,))
 
 		#untrainedError = stickerAttack.test(model2,loader)
 
@@ -68,14 +69,8 @@ for i in range(1,21):
 				placer)
 
 		if j > 0:
-			stickerTrainer.train(loader,optimizer,1,targetModel = model_test,root="SGD/%.3f_wd0.001/"%(i/3.0,))
-			torch.save(sticker,"SGD/%.3f_wd0.001/sticker_sgd.pkl"%(i/3.0,))
+			stickerTrainer.train(loader,optimizer,1,targetModel = model_test,root="SGD/%.3f_wd0.001/"%(learningRate,))
+			torch.save(sticker,"SGD/%.3f_wd0.001/sticker_sgd.pkl"%(learningRate,))
 		else:
-			stickerTrainer.train(loader,optimizer,1,targetModel = model_test,root="SGD/%.3f/"%(i/3.0,))
-			torch.save(sticker,"SGD/%.3f/sticker_sgd.pkl"%(i/3.0,))
-
-		sticker = (sticker() + 1)/2
-		sticker = sticker.permute(1,2,0).detach()
-		sticker = sticker.cpu().numpy()
-		sticker = np.clip(sticker,0,1)
-		io.imsave("ai_sticker_sgd_%f_res101_50_v2.png"%(trainedError),sticker)
+			stickerTrainer.train(loader,optimizer,1,targetModel = model_test,root="SGD/%.3f/"%(learningRate,))
+			torch.save(sticker,"SGD/%.3f/sticker_sgd.pkl"%(learningRate,))

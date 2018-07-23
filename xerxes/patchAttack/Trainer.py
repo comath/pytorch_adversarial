@@ -102,7 +102,7 @@ class StickerTrainer():
 		else:
 			self.cuda = False
 
-	def train(self,dataLoader,optimizer,epochs, num_steps = None,update_rate = 20,targetModel = None,root = "Adam/"):
+	def train(self,dataLoader,optimizer,epochs, num_steps = None,update_rate = 50,targetModel = None,root = "Adam/"):
 		# Setup threads
 
 		epoch_size = len(dataLoader)
@@ -138,13 +138,13 @@ class StickerTrainer():
 				#print(images[0].size(),images[1].size())
 				optimizer.zero_grad()
 				
-				sticker.backward(grad)
+				sticker.backward((1.0/len(self.models))*grad)
 				optimizer.step()
 				self.sticker.clamp()
 
 				if i % (update_rate-1) == 0 and targetModel is not None:
 					total, correct = 0.0,0.0
-					testloader = itertools.islice(dataLoader, 40)
+					testloader = itertools.islice(dataLoader, 50)
 					for testData in testloader:
 						testImage, labels = testData
 						t, c = targetModel(testImage)

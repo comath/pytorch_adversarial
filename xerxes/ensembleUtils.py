@@ -1,41 +1,47 @@
 import torch.nn as nn
 import torch
 
-class PatchModelWrap(nn.Module):
-	'''
-	Wraps a model so that we can easily hand it a patch and get back the gradient
-	'''
-	def __init__(self,model,loss,target,placerArgs):
-		super(ModelGrad, self).__init__()
+class targetModelWrap(nn.Module):
+	def __init__(self,model,target,device = None):
+		super(targetModelWrap, self).__init__()
 		self.model = model
-		self.add_module("model",model)
-		self.loss = loss
 		self.target = target
-		self.add_module("loss",loss)
-		self.placer = AffinePlacer(*placerArgs)
-		self.add_module("placer",res)
-		self.updateLoss = nn.Parameter(torch.zeros(1),requires_grad=False)
+		self.batchSize = 0
+		self.targetLabel = None
+		self.device = device
+		self.numDev = torch.cuda.device_count()
+		if self.device is None:
+			self.models = nn.parallel.replicate(model.cuda(), list(range(self.numDev)))
 
 	def __setBatchSize__(self,batchSize):
 		self.batchSize = batchSize
 		if self.targetLabel is not None:
 			del self.targetLabel
 		self.targetLabel = torch.full([self.batchSize],
-				self.my_target,
-				dtype=torch.long,
-				device=self.updateLoss.device)
+				self.target,
+				dtype=torch.long)
+		if self.device is None:
+			self.targetLabel = self.targetLabel.cuda()
+			#self.targetLabel = torch.cuda.comm.scatter(self.targetLabel,list(range(self.numDev)))
+		else:
+			self.targetLabel = self.targetLabel.to(self.device)
 
-	def getRunningLoss(self):
-		retVal = self.updateLoss
-		self.updateLoss[0] = 0
-		return self.updateLoss
-
-	def forward(self,images, sticker):
+	def forward(self,images):
+		total = images.size(0)
 		if self.batchSize != images.size()[0]:
 			self.__setBatchSize__(images.size()[0])
-		sticker_adv = sticker.requires_grad_()
-		stickered = self.placer(images,sticker_adv)
-		y = self.model(stickered)
-		loss = self.lossfn(y,targetLabel)
-		stickerGrad = torch.autograd.grad(loss, sticker_adv)[0]
-		return stickerGrad,loss
+		if self.device is None:
+			images = images.cuda()
+			images = zip(torch.cuda.comm.scatter(images,list(range(self.numDev))))
+			preds = nn.parallel.parallel_apply(self.models,images)
+			y = torch.cuda.comm.gather(preds,destination = 0)
+			val, pred = torch.max(y.data, 1)
+			correct = ((pred == self.targetLabel).sum().item())
+		else:
+			images = images.to(self.device)
+			y = self.model(images)
+			val, pred = torch.max(y.data, 1)
+			correct = ((pred == self.targetLabel).sum().item())
+
+		return total,correct
+

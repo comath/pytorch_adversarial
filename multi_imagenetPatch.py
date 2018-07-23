@@ -21,6 +21,8 @@ loader = imgnet.training(batch_size)
 dataiter = iter(loader)
 imgs, labels = dataiter.next()
 print(imgs.mean())
+print(imgs.min())
+print(imgs.max())
 print(imgs.var())
 
 mask = np.ones((3,224,224),dtype=np.float32)
@@ -32,45 +34,48 @@ model4 = torchvision.models.resnet50(pretrained=True)
 
 model_test = torchvision.models.vgg19_bn(pretrained=True).cuda()
 
-sticker = AdversarialSticker(mask,0.5)
-placer = AffinePlacer(mask,(3,224,224),90,0.6,(0.05,1.0))
-stickerAttack = StickerAttack(sticker,placer,346)
-
-criterion = nn.CrossEntropyLoss()
-optimizer = optim.SGD([sticker.sticker], lr= 5)
-scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.1)
-
-#untrainedError = stickerAttack.test(model2,loader)
-
-stickerTrainer = StickerTrainer(
-		sticker,
-			[model1,
-			model2,
-			model3,
-			model4],
-		[criterion,
-		criterion,
-		criterion,
-		criterion],
-		346,
-		placer)
-stickerTrainer.train(loader,optimizer,10)
-torch.save(sticker,"sticker_sgd.pkl")
-
-model2 = model2.cuda(0)
-trainedError = stickerAttack.test(model2,loader)
-print('Trained success rate: %.5f'%(trainedError,))
-stickerAttack = stickerAttack.cuda(0)
-dataiter = iter(loader)
-images, labels = dataiter.next()
-images = images.cuda(0)
-stickerAttack.visualize(images,model1,filename="sticker_attack1.png")
-model2 = model2.cuda(0)
-stickerAttack.visualize(images,model2,filename="sticker_attack2.png")
+os.mkdir("./SGD/")
+for i in range(1,21):
+	for j in range(2):
+		mask = np.ones((3,224,224),dtype=np.float32)
 
 
-sticker = (sticker() + 1)/2
-sticker = sticker.permute(1,2,0).detach()
-sticker = sticker.cpu().numpy()
-sticker = np.clip(sticker,0,1)
-io.imsave("ai_sticker_sgd_%f_res101_50_v2.png"%(trainedError),sticker)
+		sticker = AdversarialSticker(mask,0.5)
+		placer = AffinePlacer(mask,(3,224,224),15,0.6,(0.1,0.8))
+		stickerAttack = StickerAttack(sticker,placer,346)
+
+		criterion = nn.CrossEntropyLoss()
+		if j > 0:
+			optimizer = optim.SGD([sticker.sticker], lr= i/3.0, weight_decay = 0.001)
+			os.mkdir("./SGD/%.3f_wd0.001/"%(i/3.0,))
+		else:
+			optimizer = optim.SGD([sticker.sticker], lr= i/3.0)
+			os.mkdir("./SGD/%.3f/"%(i/3.0,))
+
+		#untrainedError = stickerAttack.test(model2,loader)
+
+		stickerTrainer = StickerTrainer(
+				sticker,
+					[model1,
+					model2,
+					model3,
+					model4],
+				[criterion,
+				criterion,
+				criterion,
+				criterion],
+				346,
+				placer)
+
+		if j > 0:
+			stickerTrainer.train(loader,optimizer,1,targetModel = model_test,root="SGD/%.3f_wd0.001/"%(i/3.0,))
+			torch.save(sticker,"SGD/%.3f_wd0.001/sticker_sgd.pkl"%(i/3.0,))
+		else:
+			stickerTrainer.train(loader,optimizer,1,targetModel = model_test,root="SGD/%.3f/"%(i/3.0,))
+			torch.save(sticker,"SGD/%.3f/sticker_sgd.pkl"%(i/3.0,))
+
+		sticker = (sticker() + 1)/2
+		sticker = sticker.permute(1,2,0).detach()
+		sticker = sticker.cpu().numpy()
+		sticker = np.clip(sticker,0,1)
+		io.imsave("ai_sticker_sgd_%f_res101_50_v2.png"%(trainedError),sticker)

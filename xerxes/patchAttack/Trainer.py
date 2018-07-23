@@ -6,7 +6,9 @@ import time
 from tqdm import tqdm
 from ..attackTemplate import BaseAttack
 from ..utils import *
+from ..ensembleUtils import *
 from __init__ import *
+import itertools
 
 class PatchModelWrap():
 	'''
@@ -18,20 +20,17 @@ class PatchModelWrap():
 		#self.add_module("model",model)
 		self.lossfn = lossfn
 		self.target = target
-		self.updateLoss = torch.zeros(1)
 		self.device = torch.device("cpu")
 		self.batchSize = 0
 		self.targetLabel = None
 
 	def cuda(self,i):
 		self.device = torch.device("cuda:%d"%(i,))
-		self.updateLoss = self.updateLoss.to(self.device)
 		self.model = self.model.to(self.device)
 		return self
 
 	def device(self,dev):
 		self.device = torch.device(dev)
-		self.updateLoss = self.updateLoss.to(self.device)
 		self.model = self.model.to(self.device)
 		return self
 
@@ -44,20 +43,13 @@ class PatchModelWrap():
 				dtype=torch.long,
 				device=self.device)
 
-	def getRunningLoss(self):
-		retVal = self.updateLoss
-		self.updateLoss[0] = 0
-		return retVal
-
 	def __call__(self,images):
 		if images.device != self.device:
 			self.device = images.device
 		if self.batchSize != images.size()[0]:
 			self.__setBatchSize__(images.size()[0])
 		y = self.model(images)
-		loss = self.lossfn(y,self.targetLabel)
-		self.updateLoss = self.updateLoss + loss
-		return loss
+		return self.lossfn(y,self.targetLabel)
 
 def trainStep(sticker,placer,models,images):
 	sticker_adv = sticker.requires_grad_()
@@ -66,7 +58,17 @@ def trainStep(sticker,placer,models,images):
 	for model in models[1:]:
 		loss += model(stickered)
 	grad = torch.autograd.grad(loss, sticker_adv)[0]
+	del loss
 	return grad
+
+def testStep(sticker,placer,model,images,targetLabel):
+	sticker = sticker.requires_grad_()
+	stickered = placer(images,sticker)
+	y = model(stickered)
+	val, pred = torch.max(y.data, 1)
+	correct = ((pred == targetLabel).sum().item())
+	total = images.size(0)
+	return total,correct
 
 class StickerTrainer():
 	'''
@@ -81,6 +83,7 @@ class StickerTrainer():
 
 		self.sticker = sticker
 		self.placer = placer
+		self.target = target
 		self.models = [PatchModelWrap(model,loss,target) for model,loss in zip(models,losses)]
 		self.cuda = False
 
@@ -99,11 +102,14 @@ class StickerTrainer():
 		else:
 			self.cuda = False
 
-	def train(self,dataLoader,optimizer,epochs, num_steps = None,update_rate = 20):
+	def train(self,dataLoader,optimizer,epochs, num_steps = None,update_rate = 20,targetModel = None,root = "Adam/"):
 		# Setup threads
 
 		epoch_size = len(dataLoader)
 		images,labels = iter(dataLoader).next()
+
+		if targetModel is not None:
+			targetModel = targetModelWrap(targetModel,self.target)
 
 		for epoch in range(epochs):
 			epoch_loss = torch.zeros((1,))
@@ -135,3 +141,19 @@ class StickerTrainer():
 				sticker.backward(grad)
 				optimizer.step()
 				self.sticker.clamp()
+
+				if i % (update_rate-1) == 0 and targetModel is not None:
+					total, correct = 0.0,0.0
+					testloader = itertools.islice(dataLoader, 40)
+					for testData in testloader:
+						testImage, labels = testData
+						t, c = targetModel(testImage)
+						total += t
+						correct += c
+					sticker = self.sticker()
+					print(sticker.max(),sticker.min(),sticker.var(),sticker.mean())
+					print(testImage.max(),testImage.min(),testImage.var(),testImage.mean())
+					trainedError = correct/total
+
+					self.sticker.save(root+"ai_sticker_iter_%d_%.3f_res101_50.png"%(i+1,trainedError))
+					torch.save(self.sticker,root+"sticker_iter_%d_%.3f_res101_50.pkl"%(i+1,trainedError))

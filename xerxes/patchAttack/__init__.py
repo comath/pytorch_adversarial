@@ -5,6 +5,7 @@ import math
 import time
 from tqdm import tqdm
 from ..attackTemplate import BaseAttack
+from skimage import io, transform, img_as_float
 from ..utils import *
 
 class AdversarialSticker(nn.Module):
@@ -23,14 +24,21 @@ class AdversarialSticker(nn.Module):
 		self.mean = mean
 		zero_mean = torch.zeros(self.mask.size())
 		std = std*torch.ones(self.mask.size())
-		self.sticker = nn.Parameter(torch.normal(mean,std))
+		self.sticker = nn.Parameter(torch.normal(zero_mean,std))
+
+	def forward(self):
+		maskedSticker = self.mean + self.sticker 						# place it in the middle of the pixel space
+		maskedSticker = torch.mul(maskedSticker,self.mask)
+		return maskedSticker
 
 	def clamp(self):
 		self.sticker.data = torch.clamp(self.sticker,-0.5,0.5).data
-
-	def forward(self):
-		return torch.mul(self.mean + self.sticker,self.mask)
-		
+		'''
+		centered = self.sticker
+		m = centered.abs().max()
+		if m > 0.5:
+			self.sticker.data = ((0.5/m)*self.sticker).data
+		'''
 	def size(self):
 		return self.mask.size()
 

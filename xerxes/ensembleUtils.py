@@ -26,7 +26,7 @@ class targetModelWrap(nn.Module):
 		else:
 			self.targetLabel = self.targetLabel.to(self.device)
 
-	def forward(self,images):
+	def test(self,images):
 		total = images.size(0)
 		if self.batchSize != images.size()[0]:
 			self.__setBatchSize__(images.size()[0])

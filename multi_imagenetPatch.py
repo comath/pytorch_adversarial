@@ -9,11 +9,11 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from xerxes.patchAttack import *
-from xerxes.patchAttack.Trainer import *
+from xerxes.patchAttack.dataParallelTrainer import *
 from xerxes.utils import *
 from xerxes.targets.datasets import IMAGENET
 
-batch_size = 50
+batch_size = 20
 imgnet = IMAGENET()
 
 #testloader = torch.utils.data.DataLoader(testset, batch_size=batch_size, num_workers=40, pin_memory=True)
@@ -34,24 +34,21 @@ model4 = torchvision.models.resnet50(pretrained=True)
 
 model_test = torchvision.models.vgg19_bn(pretrained=True).cuda()
 
-os.mkdir("./SGD/")
-for i in range(1,6):
+#os.mkdir("./SGD_20batch/")
+for i in range(1,2):
 	for j in range(2):
-		learningRate = i *  1.0
+		learningRate = i *  0.3
 		mask = np.ones((3,224,224),dtype=np.float32)
 
 
 		sticker = AdversarialSticker(mask,0.5)
-		placer = AffinePlacer(mask,(3,224,224),15,0.6,(0.1,0.8))
+		placer = AffinePlacer(mask,(3,224,224),15,0.6,(0.3,1.0))
 		stickerAttack = StickerAttack(sticker,placer,346)
 
 		criterion = nn.CrossEntropyLoss()
-		if j > 0:
-			optimizer = optim.SGD([sticker.sticker], lr= learningRate, weight_decay = 0.001)
-			os.mkdir("./SGD/%.3f_wd0.001/"%(learningRate,))
-		else:
-			optimizer = optim.SGD([sticker.sticker], lr= learningRate)
-			os.mkdir("./SGD/%.3f/"%(learningRate,))
+		
+		optimizer = optim.SGD([sticker.sticker], lr= learningRate)
+		os.mkdir("./SGD_20batch/%.3f/"%(learningRate,))
 
 		#untrainedError = stickerAttack.test(model2,loader)
 
@@ -68,9 +65,5 @@ for i in range(1,6):
 				346,
 				placer)
 
-		if j > 0:
-			stickerTrainer.train(loader,optimizer,1,targetModel = model_test,root="SGD/%.3f_wd0.001/"%(learningRate,))
-			torch.save(sticker,"SGD/%.3f_wd0.001/sticker_sgd.pkl"%(learningRate,))
-		else:
-			stickerTrainer.train(loader,optimizer,1,targetModel = model_test,root="SGD/%.3f/"%(learningRate,))
-			torch.save(sticker,"SGD/%.3f/sticker_sgd.pkl"%(learningRate,))
+		stickerTrainer.train(loader,optimizer,1,targetModel = model_test,root="SGD_20batch/%.3f/"%(learningRate,))
+		torch.save(sticker,"SGD_20batch/%.3f/sticker_sgd.pkl"%(learningRate,))

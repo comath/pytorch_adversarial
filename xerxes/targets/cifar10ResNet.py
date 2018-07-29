@@ -10,6 +10,7 @@ import os
 
 from .datasets import CIFAR10
 from ..utils import *
+
 class residual(nn.Module):
     def __init__(self,nxn,connections,padding):
         super(residual, self).__init__()
@@ -53,6 +54,9 @@ class CIFAR10ResNet(nn.Module):
 
         self.fc1 = nn.Linear(64*8*8, 10)
 
+        self.layerCount = n*2*3 + 4
+    
+
     def forward(self, x):
         x = F.relu(self.conv1(x))
         x = self.bn1(x)
@@ -74,27 +78,27 @@ class CIFAR10ResNet(nn.Module):
     def dataset(self):
         return CIFAR10
 
-def trainCIFAR10ResNet(device=None,directory = ''):
+def trainCIFAR10ResNet(n,device=None,directory = ''):
     if device is None:
         device = getDevice()
         
-    net = CIFAR10ResNet(3)
+    net = CIFAR10ResNet(n)
     cifar = CIFAR10()
     batch_size = 240
     trainloader = cifar.training(batch_size)
     
 
-    print('Training CIFAR10 ResNet Model')
+    print('Training CIFAR10 ResNet Model with %d layers'%(net.layerCount))
     criterion = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(net.parameters(), lr=0.002)
-    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.75)
-    trainModel(net,trainloader,optimizer,criterion,200)
+    optimizer = optim.Adam(net.parameters(), lr=0.001)
+    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.9)
+    trainModel(net,trainloader,optimizer,criterion,400)
     
     net.eval()
     print('Finished Training, getting accuracy')
     testloader = cifar.testing()
     accuracy = testAccuracy(net,testloader)
 
-    model_path = os.path.join(directory, "cifar10ResNet.pkl")
-    print('Saving as: cifar10ResNet.pkl, with accuracy %.4f'%(accuracy,))
+    model_path = os.path.join(directory, "cifar10ResNet%d.pkl"%(net.layerCount,))
+    print('Saving as: cifar10ResNet%d.pkl, with accuracy %.4f'%(net.layerCount,accuracy,))
     torch.save(net,model_path)

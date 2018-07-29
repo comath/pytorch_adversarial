@@ -53,10 +53,12 @@ class StickerTrainer():
 			self.placers = nn.parallel.replicate(placer.cuda(), list(range(self.numDev)))
 			# Move all the models to GPUs. We're an ensemble model parallel 
 			self.cudaModels = []
+			self.cudaLosses = []
 			self.trainingSteps = [trainStep for i in range(self.numDev)]
 			self.testingSteps = [testStep for i in range(self.numDev)]
-			for model in self.models:
+			for model,loss in zip(self.models,self.losses):
 				self.cudaModels.append(nn.parallel.replicate(model.cuda(), list(range(self.numDev))))
+				self.cudaLosses.append(nn.parallel.replicate(loss.cuda(), list(range(self.numDev))))
 
 			self.sticker = self.sticker.cuda()
 		else:
@@ -94,14 +96,14 @@ class StickerTrainer():
 			for i, data in dataIterator:
 				if num_steps is not None and i > num_steps: 
 					break
-				sticker = self.sticker()
 				images, labels = data
 
 				if self.cuda:
 					images = images.cuda()
 					images = torch.cuda.comm.scatter(images,list(range(self.numDev)))
-					stickers = torch.cuda.comm.broadcast(sticker,list(range(self.numDev)))
-					for model,loss in zip(self.cudaModels,losses):
+					for model,loss in zip(self.cudaModels,self.cudaLosses):
+						sticker = self.sticker()
+						stickers = torch.cuda.comm.broadcast(sticker,list(range(self.numDev)))
 						gradsAndLosses = nn.parallel.parallel_apply(
 							self.trainingSteps,zip(
 								stickers,
@@ -113,8 +115,8 @@ class StickerTrainer():
 
 						grads,losses = zip(*gradsAndLosses)
 						grad = torch.cuda.comm.reduce_add(grads,0)
+						
 						optimizer.zero_grad()
-					
 						sticker.backward(grad)
 						optimizer.step()
 						self.sticker.clamp()

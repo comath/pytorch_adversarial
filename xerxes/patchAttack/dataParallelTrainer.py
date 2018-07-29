@@ -76,7 +76,7 @@ class StickerTrainer():
 			self.targetLabel = torch.cuda.comm.scatter(self.targetLabel,list(range(self.numDev)))
 
 
-	def train(self,dataLoader,optimizer,epochs, num_steps = None,update_rate = 50,targetModel = None,root = "Adam/"):
+	def train(self,dataLoader,optimizer,epochs, num_steps = None,update_rate = 50,targetModel = None,root = None):
 		# Setup threads
 
 		epoch_size = len(dataLoader)
@@ -92,7 +92,7 @@ class StickerTrainer():
 			epoch_loss = torch.zeros((1,))
 
 			dataIterator = tqdm(enumerate(dataLoader, 0),total = epoch_size)
-			dataIterator.set_description("update loss: %.3f, epoch loss: %.3f" % (0,0))
+			dataIterator.set_description("current validation: %.3f" % (0,))
 			for i, data in dataIterator:
 				if num_steps is not None and i > num_steps: 
 					break
@@ -150,6 +150,7 @@ class StickerTrainer():
 					print(sticker.max(),sticker.min(),sticker.var(),sticker.mean())
 					print(testImage.max(),testImage.min(),testImage.var(),testImage.mean())
 					trainedError = correct/total
-
-					self.sticker.save(root+"ai_sticker_iter_%d_%.3f_res101_50.png"%(i+1,trainedError))
-					torch.save(self.sticker,root+"sticker_iter_%d_%.3f_res101_50.pkl"%(i+1,trainedError))
+					dataIterator.set_description("current validation: %.3f" % (trainedError,))
+					if root is not None:
+						self.sticker.save(root+"ai_sticker_iter_%d_%.3f_res101_50.png"%(i+1,trainedError))
+						torch.save(self.sticker,root+"sticker_iter_%d_%.3f_res101_50.pkl"%(i+1,trainedError))

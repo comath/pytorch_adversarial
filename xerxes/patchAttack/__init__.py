@@ -9,7 +9,7 @@ from skimage import io, transform, img_as_float
 from ..utils import *
 
 class AdversarialSticker(nn.Module):
-	def __init__(self,mask,mean,std = 0.1):
+	def __init__(self,mask,mean,pixel_range,std = 0.1):
 		super(AdversarialSticker, self).__init__()
 
 		if isinstance(mask, str):
@@ -22,6 +22,7 @@ class AdversarialSticker(nn.Module):
 		self.mask = nn.Parameter(self.mask,requires_grad = False)
 
 		self.mean = mean
+		self.pixel_range = pixel_range
 		zero_mean = torch.zeros(self.mask.size())
 		std = std*torch.ones(self.mask.size())
 		self.sticker = nn.Parameter(torch.normal(zero_mean,std))
@@ -32,7 +33,7 @@ class AdversarialSticker(nn.Module):
 		return maskedSticker
 
 	def clamp(self):
-		self.sticker.data = torch.clamp(self.sticker,-0.5,0.5).data
+		self.sticker.data = torch.clamp(self.sticker,self.pixel_range[0],self.pixel_range[1]).data
 		'''
 		centered = self.sticker
 		m = centered.abs().max()
@@ -46,7 +47,7 @@ class AdversarialSticker(nn.Module):
 		sticker = self.__call__()
 		sticker = sticker.permute(1,2,0).detach()
 		sticker = sticker.cpu().numpy()
-		sticker = np.clip(sticker,0,1)
+		sticker = np.clip((sticker-self.pixel_range[0])/(self.pixel_range[1]-self.pixel_range[0]),0,1)
 		io.imsave(filename,sticker)
 
 class AffinePlacer(nn.Module):
